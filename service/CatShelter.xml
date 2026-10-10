@@ -1,0 +1,19 @@
+<service>
+  <id>CatShelter</id>
+  <name>Cat Shelter Website</name>
+  <description>Веб-сайт приюта «Доброта для кота»</description>
+  <executable>C:\Program Files\nodejs\node.exe</executable>
+  <arguments>dist-server/server.js --production</arguments>
+  <workingdirectory>D:\cat-shelter</workingdirectory>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>false</delayedAutoStart>
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>20 sec</stoptimeout>
+  <logpath>D:\cat-shelter\service\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10485760</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+</service>

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://kind4cat.ru/sitemap.xml
+Host: kind4cat.ru

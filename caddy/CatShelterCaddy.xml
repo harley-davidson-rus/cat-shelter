@@ -1,0 +1,19 @@
+<service>
+  <id>CatShelterCaddy</id>
+  <name>Cat Shelter HTTPS</name>
+  <description>HTTPS reverse proxy и автоматическое продление сертификата kind4cat.ru</description>
+  <executable>D:\cat-shelter\caddy\caddy.exe</executable>
+  <arguments>run --config D:\cat-shelter\caddy\Caddyfile --adapter caddyfile</arguments>
+  <workingdirectory>D:\cat-shelter\caddy</workingdirectory>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>false</delayedAutoStart>
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>20 sec</stoptimeout>
+  <logpath>D:\cat-shelter\caddy\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10485760</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+</service>

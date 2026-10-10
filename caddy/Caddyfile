@@ -1,0 +1,8 @@
+www.kind4cat.ru {
+	redir https://kind4cat.ru{uri} permanent
+}
+
+kind4cat.ru {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+}
