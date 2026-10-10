@@ -38,6 +38,8 @@ import {
   Folder,
   FolderOpen,
   ArrowLeft,
+  Menu,
+  ChevronDown,
 } from 'lucide-react';
 import { Cat, AdoptionApplication, ApplicationStatus, ShelterArticle, ShelterStats, SiteContacts } from '../types';
 import realCatPhoto from '../assets/defaultCat';
@@ -95,6 +97,7 @@ interface AdminDashboardProps {
   onAuthenticated: () => Promise<void> | void;
 }
 
+type AdminTabId = 'applications' | 'cats' | 'articles' | 'stats' | 'contacts' | 'analytics' | 'database';
 
 const STATUS_CONFIG: Record<
   ApplicationStatus,
@@ -168,7 +171,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [passwordInput, setPasswordInput] = useState('');
   const passwordInputRef = React.useRef<HTMLInputElement>(null);
   const [loginError, setLoginError] = useState('');
-  const [activeTab, setActiveTab] = useState<'applications' | 'cats' | 'articles' | 'stats' | 'contacts' | 'analytics' | 'database'>('applications');
+  const [activeTab, setActiveTab] = useState<AdminTabId>('applications');
+  const [isMobileTabMenuOpen, setIsMobileTabMenuOpen] = useState(false);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
   const [serverStats, setServerStats] = useState<ServerDatabaseStats | null>(null);
@@ -197,6 +201,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       window.removeEventListener(ADMIN_SESSION_AUTHENTICATED_EVENT, handleSessionAuthenticated);
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!isOpen || !isAuthenticated) setIsMobileTabMenuOpen(false);
+  }, [isOpen, isAuthenticated]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -559,6 +567,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => window.cancelAnimationFrame(frameId);
   }, [activeTab, articles, isOpen, newlyAddedArticleId, onNewArticlePositioned]);
 
+  const adminTabs: ReadonlyArray<{
+    id: AdminTabId;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    count?: number;
+  }> = [
+    { id: 'applications', label: 'Заявки', icon: ClipboardList, count: applications.length },
+    { id: 'cats', label: 'Котики', icon: CatIcon, count: cats.length },
+    { id: 'articles', label: 'Новости', icon: PenTool, count: articles.length },
+    { id: 'contacts', label: 'Контакты', icon: MapPin },
+    { id: 'stats', label: 'Счётчики', icon: Sparkles },
+    { id: 'analytics', label: 'Посещения', icon: BarChart3 },
+    { id: 'database', label: 'База данных', icon: Database },
+  ];
+  const activeAdminTab = adminTabs.find((tab) => tab.id === activeTab) || adminTabs[0];
+  const ActiveAdminTabIcon = activeAdminTab.icon;
+
+  const selectAdminTab = (tabId: AdminTabId) => {
+    setActiveTab(tabId);
+    setIsMobileTabMenuOpen(false);
+  };
+
   const maxDailyVisits = Math.max(1, ...(visitAnalytics?.daily.map((day) => day.visits) || [1]));
 
   return (
@@ -799,45 +829,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Navigation Tabs Bar */}
-            <div className="px-3 sm:px-8 pt-3 sm:pt-4 pb-3 bg-stone-50 border-b border-stone-200 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 shrink-0">
-              <div className="lg:hidden">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">
-                  Раздел панели
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {([
-                    { id: 'applications', label: 'Заявки', icon: ClipboardList, count: applications.length },
-                    { id: 'cats', label: 'Котики', icon: CatIcon, count: cats.length },
-                    { id: 'articles', label: 'Новости', icon: PenTool, count: articles.length },
-                    { id: 'contacts', label: 'Контакты', icon: MapPin, count: undefined },
-                    { id: 'stats', label: 'Счётчики', icon: Sparkles, count: undefined },
-                    { id: 'analytics', label: 'Посещения', icon: BarChart3, count: undefined },
-                    { id: 'database', label: 'База данных', icon: Database, count: undefined },
-                  ] as const).map(({ id, label, icon: Icon, count }) => {
-                    const isActive = activeTab === id;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setActiveTab(id)}
-                        aria-pressed={isActive}
-                        className={'min-h-11 px-3 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer ' + (
-                          isActive
-                            ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
-                            : 'bg-white border-stone-200 text-stone-700 hover:bg-stone-100'
-                        )}
-                      >
-                        <Icon className="w-4 h-4 shrink-0" />
-                        <span>{label}</span>
-                        {typeof count === 'number' && (
-                          <span className={'px-1.5 py-0.5 rounded-full text-[10px] ' + (isActive ? 'bg-amber-600 text-white' : 'bg-stone-100 text-stone-600')}>
-                            {count}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+            <div className="relative z-20 px-3 sm:px-8 py-2.5 sm:py-3 bg-stone-50 border-b border-stone-200 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 shrink-0">
+              <div className="relative lg:hidden">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileTabMenuOpen((open) => !open)}
+                  aria-expanded={isMobileTabMenuOpen}
+                  aria-controls="admin-mobile-navigation"
+                  className="w-full min-h-11 px-3.5 py-2 rounded-xl border border-stone-200 bg-white text-stone-800 font-bold flex items-center gap-2.5 shadow-xs transition-colors hover:border-amber-300 hover:bg-amber-50 cursor-pointer"
+                >
+                  <ActiveAdminTabIcon className="w-4.5 h-4.5 text-amber-600 shrink-0" />
+                  <span className="text-sm">{activeAdminTab.label}</span>
+                  {typeof activeAdminTab.count === 'number' && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-600 text-[10px]">
+                      {activeAdminTab.count}
+                    </span>
+                  )}
+                  <span className="ml-auto flex items-center gap-2 text-xs text-stone-500">
+                    <Menu className="w-4.5 h-4.5" />
+                    <ChevronDown className={'w-4 h-4 transition-transform ' + (isMobileTabMenuOpen ? 'rotate-180' : '')} />
+                  </span>
+                </button>
+
+                {isMobileTabMenuOpen && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Закрыть меню разделов"
+                      onClick={() => setIsMobileTabMenuOpen(false)}
+                      className="fixed inset-0 z-30 bg-stone-950/30 lg:hidden cursor-default"
+                    />
+                    <nav
+                      id="admin-mobile-navigation"
+                      aria-label="Разделы панели куратора"
+                      className="absolute z-40 top-full left-0 right-0 mt-2 p-2 rounded-2xl border border-stone-200 bg-white shadow-2xl grid grid-cols-1 sm:grid-cols-2 gap-1"
+                    >
+                      {adminTabs.map(({ id, label, icon: Icon, count }) => {
+                        const isActive = activeTab === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => selectAdminTab(id)}
+                            aria-current={isActive ? 'page' : undefined}
+                            className={'min-h-11 px-3 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-3 transition-colors cursor-pointer ' + (
+                              isActive
+                                ? 'bg-amber-500 text-white'
+                                : 'text-stone-700 hover:bg-amber-50 hover:text-amber-800'
+                            )}
+                          >
+                            <Icon className={'w-5 h-5 shrink-0 ' + (isActive ? 'text-white' : 'text-amber-600')} />
+                            <span>{label}</span>
+                            {typeof count === 'number' && (
+                              <span className={'ml-auto px-1.5 py-0.5 rounded-full text-[10px] ' + (isActive ? 'bg-amber-600 text-white' : 'bg-stone-100 text-stone-600')}>
+                                {count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </nav>
+                  </>
+                )}
               </div>
               <div className="hidden lg:grid grid-cols-7 gap-2 w-full">
                 <button
