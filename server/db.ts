@@ -96,6 +96,20 @@ export interface StoredMediaAsset {
   sizeBytes: number;
 }
 
+function normalizeSiteContacts(data?: Partial<SiteContacts> | null): SiteContacts {
+  return {
+    address: typeof data?.address === 'string' ? data.address : 'Санкт-Петербург, м. Площадь Мужества',
+    visitingHours: typeof data?.visitingHours === 'string' ? data.visitingHours : 'Любой день по предварительной договорённости.',
+    phone: typeof data?.phone === 'string' ? data.phone : '',
+    telegram: typeof data?.telegram === 'string' ? data.telegram : 't.me/maythecatbewithyou',
+    telegramUrl: typeof data?.telegramUrl === 'string' ? data.telegramUrl : 'https://t.me/maythecatbewithyou',
+    maxUrl: typeof data?.maxUrl === 'string' && data.maxUrl.trim() ? data.maxUrl : 'https://max.ru/channel_dobrotadylakota',
+    vkUrl: typeof data?.vkUrl === 'string' && data.vkUrl.trim() ? data.vkUrl : 'https://vk.ru/dobrota_dlya_kota',
+    youtubeUrl: typeof data?.youtubeUrl === 'string' && data.youtubeUrl.trim() ? data.youtubeUrl : 'https://www.youtube.com/@dobrota_d_kota',
+    rutubeUrl: typeof data?.rutubeUrl === 'string' && data.rutubeUrl.trim() ? data.rutubeUrl : 'https://rutube.ru/channel/82015606',
+  };
+}
+
 function collectMediaFileNames(value: unknown, result = new Set<string>()): Set<string> {
   if (typeof value === 'string') {
     const fileName = getStoredMediaFileName(value);
@@ -315,6 +329,7 @@ export async function initDatabase(): Promise<ServerDbStats> {
       maxUrl: 'https://max.ru/channel_dobrotadylakota',
       vkUrl: 'https://vk.ru/dobrota_dlya_kota',
       youtubeUrl: 'https://www.youtube.com/@dobrota_d_kota',
+      rutubeUrl: 'https://rutube.ru/channel/82015606',
     }]
   );
   await pool.query(
@@ -354,6 +369,7 @@ export async function getBootstrapData(ownerId: string): Promise<BootstrapData> 
   return {
     ...result.rows[0],
     cats: result.rows[0].cats.map(sanitizeCat),
+    siteContacts: normalizeSiteContacts(result.rows[0].siteContacts),
   };
 }
 
@@ -495,17 +511,7 @@ export async function getSiteContacts(): Promise<SiteContacts> {
     'SELECT data FROM site_settings WHERE key = $1',
     ['site_contacts']
   );
-  const data = result.rows[0]?.data;
-  return {
-    address: typeof data?.address === 'string' ? data.address : 'Санкт-Петербург, м. Площадь Мужества',
-    visitingHours: typeof data?.visitingHours === 'string' ? data.visitingHours : 'Любой день по предварительной договорённости.',
-    phone: typeof data?.phone === 'string' ? data.phone : '',
-    telegram: typeof data?.telegram === 'string' ? data.telegram : 't.me/maythecatbewithyou',
-    telegramUrl: typeof data?.telegramUrl === 'string' ? data.telegramUrl : 'https://t.me/maythecatbewithyou',
-    maxUrl: typeof data?.maxUrl === 'string' && data.maxUrl.trim() ? data.maxUrl : 'https://max.ru/channel_dobrotadylakota',
-    vkUrl: typeof data?.vkUrl === 'string' && data.vkUrl.trim() ? data.vkUrl : 'https://vk.ru/dobrota_dlya_kota',
-    youtubeUrl: typeof data?.youtubeUrl === 'string' && data.youtubeUrl.trim() ? data.youtubeUrl : 'https://www.youtube.com/@dobrota_d_kota',
-  };
+  return normalizeSiteContacts(result.rows[0]?.data);
 }
 
 export async function setSiteContacts(contacts: SiteContacts): Promise<SiteContacts> {

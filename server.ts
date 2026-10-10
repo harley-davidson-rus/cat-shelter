@@ -62,6 +62,7 @@ const siteContactsSchema = z.object({
   maxUrl: optionalUrlSchema.optional().default(''),
   vkUrl: optionalUrlSchema.optional().default(''),
   youtubeUrl: optionalUrlSchema.optional().default(''),
+  rutubeUrl: optionalUrlSchema.optional().default(''),
 });
 const donationSettingsSchema = z.object({
   title: z.string().trim().min(1).max(150),

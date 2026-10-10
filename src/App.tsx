@@ -109,6 +109,7 @@ export default function App() {
     maxUrl: SHELTER_INFO.maxUrl,
     vkUrl: SHELTER_INFO.vkUrl,
     youtubeUrl: SHELTER_INFO.youtubeUrl,
+    rutubeUrl: SHELTER_INFO.rutubeUrl,
   });
 
   const [donationSettings, setDonationSettings] = useState<DonationSettings>({
@@ -297,7 +298,10 @@ export default function App() {
           setShelterStats(serverShelterStats);
         }
         if (serverSiteContacts) {
-          setSiteContacts(serverSiteContacts);
+          setSiteContacts({
+            ...serverSiteContacts,
+            rutubeUrl: serverSiteContacts.rutubeUrl || SHELTER_INFO.rutubeUrl,
+          });
         }
         if (serverDonationSettings) {
           setDonationSettings(serverDonationSettings);

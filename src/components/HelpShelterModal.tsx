@@ -1,7 +1,7 @@
 import React from 'react';
 import { Camera, Car, Heart, MapPin, Package, Phone, QrCode, Send, Sparkles, X, Youtube } from 'lucide-react';
 import { Cat, DonationSettings, SiteContacts } from '../types';
-import { MaxIcon, VkIcon } from './Footer';
+import { MaxIcon, RutubeIcon, VkIcon } from './Footer';
 
 const paymentUrl = 'https://qr.nspk.ru/AS1A005DJGHEU5TN8MEQBS8OTS7S95IK?type=01&bank=100000000111&crc=01FA';
 const supplies = [
@@ -113,6 +113,7 @@ export const HelpShelterModal: React.FC<{
                   <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2"><span className="flex items-center gap-1.5 text-stone-600"><MaxIcon className="h-3.5 w-3.5 shrink-0 text-amber-600" />MAX:</span><a href={contacts.maxUrl || 'https://max.ru/channel_dobrotadylakota'} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all font-bold text-amber-900 hover:underline sm:break-normal">{formatSocialUrl(contacts.maxUrl || 'https://max.ru/channel_dobrotadylakota')}</a></div>
                   <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2"><span className="flex items-center gap-1.5 text-stone-600"><VkIcon className="h-3.5 w-3.5 shrink-0 text-amber-600" />VK:</span><a href={contacts.vkUrl || 'https://vk.ru/dobrota_dlya_kota'} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all font-bold text-amber-900 hover:underline sm:break-normal">{formatSocialUrl(contacts.vkUrl || 'https://vk.ru/dobrota_dlya_kota')}</a></div>
                   <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2"><span className="flex items-center gap-1.5 text-stone-600"><Youtube className="h-3.5 w-3.5 shrink-0 text-amber-600" />YouTube:</span><a href={contacts.youtubeUrl || 'https://www.youtube.com/@dobrota_d_kota'} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all font-bold text-amber-900 hover:underline sm:break-normal">{formatSocialUrl(contacts.youtubeUrl || 'https://www.youtube.com/@dobrota_d_kota')}</a></div>
+                  <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2"><span className="flex items-center gap-1.5 text-stone-600"><RutubeIcon className="h-3.5 w-3.5 shrink-0 text-amber-600" />RUTUBE:</span><a href={contacts.rutubeUrl || 'https://rutube.ru/channel/82015606'} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all font-bold text-amber-900 hover:underline sm:break-normal">{formatSocialUrl(contacts.rutubeUrl || 'https://rutube.ru/channel/82015606')}</a></div>
                 </div>
               </div>
             </div>

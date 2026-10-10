@@ -55,7 +55,8 @@ export const SHELTER_INFO = {
   telegramUrl: 'https://t.me/maythecatbewithyou',
   maxUrl: 'https://max.ru/channel_dobrotadylakota',
   vkUrl: 'https://vk.ru/dobrota_dlya_kota',
-  youtubeUrl: 'https://www.youtube.com/@dobrota_d_kota'
+  youtubeUrl: 'https://www.youtube.com/@dobrota_d_kota',
+  rutubeUrl: 'https://rutube.ru/channel/82015606'
 };
 
 

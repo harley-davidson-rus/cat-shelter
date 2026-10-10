@@ -299,6 +299,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       maxUrl: contactForm.maxUrl.trim(),
       vkUrl: contactForm.vkUrl.trim(),
       youtubeUrl: contactForm.youtubeUrl.trim(),
+      rutubeUrl: contactForm.rutubeUrl.trim(),
     };
     if (!contacts.address || !contacts.visitingHours || !contacts.telegram || !contacts.telegramUrl) {
       setContactsSaveMessage({ type: 'error', text: 'Заполните все поля контактов.' });
@@ -1629,13 +1630,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                       />
                     </label>
-                    <label className="space-y-1.5 sm:col-span-2">
+                    <label className="space-y-1.5">
                       <span className="block text-xs font-bold text-stone-700 uppercase tracking-wider">Ссылка на YouTube-канал</span>
                       <input
                         type="url"
                         value={contactForm.youtubeUrl}
                         onChange={(event) => setContactForm((prev) => ({ ...prev, youtubeUrl: event.target.value }))}
                         placeholder="https://www.youtube.com/@название"
+                        className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="block text-xs font-bold text-stone-700 uppercase tracking-wider">Ссылка на RUTUBE-канал</span>
+                      <input
+                        type="url"
+                        value={contactForm.rutubeUrl}
+                        onChange={(event) => setContactForm((prev) => ({ ...prev, rutubeUrl: event.target.value }))}
+                        placeholder="https://rutube.ru/channel/00000000"
                         className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                       />
                     </label>

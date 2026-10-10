@@ -72,6 +72,7 @@ export interface SiteContacts {
   maxUrl: string;
   vkUrl: string;
   youtubeUrl: string;
+  rutubeUrl: string;
 }
 
 export interface DonationSettings {

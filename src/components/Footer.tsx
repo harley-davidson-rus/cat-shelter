@@ -16,6 +16,13 @@ export const VkIcon = ({ className = '' }: { className?: string }) => (
   </svg>
 );
 
+export const RutubeIcon = ({ className = '' }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+    <rect x="2.5" y="4.5" width="19" height="15" rx="5" stroke="currentColor" strokeWidth="2" />
+    <path d="m10 9 5 3-5 3V9Z" fill="currentColor" />
+  </svg>
+);
+
 const formatSocialUrl = (url: string) =>
   url.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '');
 
@@ -167,6 +174,20 @@ export const Footer: React.FC<FooterProps> = ({ contacts, shelterStats, onOpenAd
                     className="min-w-0 text-amber-400 hover:text-amber-300 hover:underline font-medium transition-colors break-all sm:break-normal"
                   >
                     {formatSocialUrl(contacts.youtubeUrl)}
+                  </a>
+                </li>
+              )}
+              {contacts.rutubeUrl && (
+                <li className="grid grid-cols-[1rem_7rem_minmax(0,1fr)] items-center gap-x-2.5">
+                  <RutubeIcon className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-stone-400">RUTUBE:</span>
+                  <a
+                    href={contacts.rutubeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 text-amber-400 hover:text-amber-300 hover:underline font-medium transition-colors break-all sm:break-normal"
+                  >
+                    {formatSocialUrl(contacts.rutubeUrl)}
                   </a>
                 </li>
               )}
