@@ -7,6 +7,8 @@
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --outfile=dist-server/server.js --packages=external",
     "start": "node dist-server/server.js --production",
+    "db:migrate-relational": "tsx scripts/migrateRelationalDatabase.ts",
+    "db:verify-relational": "tsx scripts/verifyRelationalMigration.ts",
     "preview": "vite preview",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('dist-server',{recursive:true,force:true})\"",
     "lint": "tsc --noEmit"

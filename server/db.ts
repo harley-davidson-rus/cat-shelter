@@ -21,6 +21,15 @@ import {
   inlineCatMedia,
   MEDIA_DIR,
 } from './media';
+import {
+  ensureRelationalSchema,
+  readApplications,
+  readArticles,
+  readCats,
+  writeApplicationRecord,
+  writeArticleRecord,
+  writeCatRecord,
+} from './relationalStore';
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -346,40 +355,52 @@ export async function initDatabase(): Promise<ServerDbStats> {
   );
   await externalizeDatabaseMedia();
   await migrateMediaDirectory();
+  await ensureRelationalSchema(pool);
   await pool.query('DELETE FROM admin_sessions WHERE expires_at <= now()');
   return getDatabaseStats();
 }
 
 export async function getAllCats(): Promise<Cat[]> {
-  const result = await pool.query<{ data: Cat }>('SELECT data FROM cats ORDER BY updated_at DESC');
-  return result.rows.map((row) => sanitizeCat(row.data));
+  return (await readCats(pool)).map(sanitizeCat);
 }
 
 export async function getBootstrapData(ownerId: string): Promise<BootstrapData> {
-  const result = await pool.query<BootstrapData>(`
-    SELECT
-      COALESCE((SELECT jsonb_agg(data ORDER BY updated_at DESC) FROM cats), '[]'::jsonb) AS cats,
-      COALESCE((SELECT jsonb_agg(data ORDER BY created_at DESC) FROM applications WHERE owner_id = $1), '[]'::jsonb) AS applications,
-      COALESCE((SELECT jsonb_agg(data ORDER BY created_at DESC, id DESC) FROM articles), '[]'::jsonb) AS articles,
-      COALESCE((SELECT data FROM user_preferences WHERE owner_id = $1), '{}'::jsonb) AS preferences,
-      (SELECT data FROM site_settings WHERE key = 'shelter_stats') AS "shelterStats",
-      (SELECT data FROM site_settings WHERE key = 'site_contacts') AS "siteContacts",
-      (SELECT data FROM site_settings WHERE key = 'donation_settings') AS "donationSettings"
-  `, [ownerId]);
+  const [cats, applications, articles, result] = await Promise.all([
+    readCats(pool),
+    readApplications(pool, ownerId),
+    readArticles(pool),
+    pool.query<Pick<BootstrapData, 'preferences' | 'shelterStats' | 'siteContacts' | 'donationSettings'>>(`
+      SELECT
+        COALESCE((SELECT data FROM user_preferences WHERE owner_id = $1), '{}'::jsonb) AS preferences,
+        (SELECT data FROM site_settings WHERE key = 'shelter_stats') AS "shelterStats",
+        (SELECT data FROM site_settings WHERE key = 'site_contacts') AS "siteContacts",
+        (SELECT data FROM site_settings WHERE key = 'donation_settings') AS "donationSettings"
+    `, [ownerId]),
+  ]);
   return {
     ...result.rows[0],
-    cats: result.rows[0].cats.map(sanitizeCat),
+    cats: cats.map(sanitizeCat),
+    applications,
+    articles,
     siteContacts: normalizeSiteContacts(result.rows[0].siteContacts),
   };
 }
 
 export async function saveCat(data: Partial<Cat> & { id?: string }): Promise<Cat> {
   if (data.id) {
-    const result = await pool.query<{ data: Cat }>('SELECT data FROM cats WHERE id = $1', [data.id]);
-    if (result.rowCount) {
-      const cat = await storeCatMedia(sanitizeCat({ ...result.rows[0].data, ...data } as Cat));
-      await pool.query('UPDATE cats SET data = $2, updated_at = now() WHERE id = $1', [cat.id, cat]);
-      return cat;
+    const current = (await readCats(pool)).find((cat) => cat.id === data.id);
+    if (current) {
+      const cat = await storeCatMedia(sanitizeCat({ ...current, ...data } as Cat));
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await writeCatRecord(client, cat, false);
+        await client.query('COMMIT');
+        return cat;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally { client.release(); }
     }
   }
   const cat = await storeCatMedia(sanitizeCat({
@@ -404,7 +425,15 @@ export async function saveCat(data: Partial<Cat> & { id?: string }): Promise<Cat
     status: data.status || 'available',
     featured: data.featured || false,
   }));
-  await pool.query('INSERT INTO cats (id, data) VALUES ($1, $2)', [cat.id, cat]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await writeCatRecord(client, cat, true);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
   return cat;
 }
 
@@ -413,26 +442,26 @@ export async function deleteCat(id: string): Promise<boolean> {
 }
 
 export async function getAllApplications(): Promise<AdoptionApplication[]> {
-  const result = await pool.query<{ data: AdoptionApplication }>('SELECT data FROM applications ORDER BY created_at DESC');
-  return result.rows.map((row) => row.data);
+  return readApplications(pool);
 }
 
 export async function getApplicationsForOwner(ownerId: string): Promise<AdoptionApplication[]> {
-  const result = await pool.query<{ data: AdoptionApplication }>('SELECT data FROM applications WHERE owner_id = $1 ORDER BY created_at DESC', [ownerId]);
-  return result.rows.map((row) => row.data);
+  return readApplications(pool, ownerId);
 }
 
 export async function createApplication(ownerId: string, data: Omit<AdoptionApplication, 'id' | 'createdAt' | 'status'>): Promise<AdoptionApplication> {
   const application = await storeApplicationMedia({ ...data, id: 'MUR-' + crypto.randomBytes(5).toString('hex').toUpperCase(), status: 'new', createdAt: new Date().toLocaleDateString('ru-RU'), adminNotes: '' });
-  await pool.query('INSERT INTO applications (id, owner_id, data) VALUES ($1, $2, $3)', [application.id, ownerId, application]);
+  await writeApplicationRecord(pool, ownerId, application, true);
   return application;
 }
 
 export async function updateApplication(id: string, updates: Partial<AdoptionApplication>): Promise<AdoptionApplication | null> {
-  const result = await pool.query<{ data: AdoptionApplication }>('SELECT data FROM applications WHERE id = $1', [id]);
-  if (!result.rowCount) return null;
-  const application = { ...result.rows[0].data, ...updates, id };
-  await pool.query('UPDATE applications SET data = $2, updated_at = now() WHERE id = $1', [id, application]);
+  const owner = await pool.query<{ owner_id: string }>('SELECT owner_id FROM applications WHERE id = $1', [id]);
+  if (!owner.rowCount) return null;
+  const current = (await readApplications(pool)).find((application) => application.id === id);
+  if (!current) return null;
+  const application = { ...current, ...updates, id };
+  await writeApplicationRecord(pool, owner.rows[0].owner_id, application, false);
   return application;
 }
 
@@ -441,20 +470,26 @@ export async function deleteApplication(id: string): Promise<boolean> {
 }
 
 export async function getAllArticles(): Promise<ShelterArticle[]> {
-  const result = await pool.query<{ data: ShelterArticle }>('SELECT data FROM articles ORDER BY created_at DESC, id DESC');
-  return result.rows.map((row) => row.data);
+  return readArticles(pool);
 }
 
 export async function createArticle(data: Omit<ShelterArticle, 'id' | 'publishedAt' | 'likesCount'>): Promise<ShelterArticle> {
   const article = await storeArticleMedia({ ...data, id: 'art-' + crypto.randomUUID(), publishedAt: new Date().toLocaleDateString('ru-RU'), likesCount: 0 });
-  await pool.query('INSERT INTO articles (id, data) VALUES ($1, $2)', [article.id, article]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await writeArticleRecord(client, article, true);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
   return article;
 }
 
 export async function updateArticle(id: string, data: Partial<ShelterArticle>): Promise<ShelterArticle | null> {
-  const result = await pool.query<{ data: ShelterArticle }>('SELECT data FROM articles WHERE id = $1', [id]);
-  if (!result.rowCount) return null;
-  const current = result.rows[0].data;
+  const current = (await readArticles(pool)).find((article) => article.id === id);
+  if (!current) return null;
   const article = await storeArticleMedia({
     ...current,
     ...data,
@@ -462,22 +497,41 @@ export async function updateArticle(id: string, data: Partial<ShelterArticle>): 
     publishedAt: current.publishedAt,
     likesCount: current.likesCount || 0,
   });
-  await pool.query('UPDATE articles SET data = $2, updated_at = now() WHERE id = $1', [id, article]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await writeArticleRecord(client, article, false);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
   return article;
 }
 export async function deleteArticle(id: string): Promise<boolean> {
-  return Boolean((await pool.query('DELETE FROM articles WHERE id = $1', [id])).rowCount);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const deleted = Boolean((await client.query('DELETE FROM articles WHERE id = $1', [id])).rowCount);
+    await client.query('DELETE FROM tags WHERE NOT EXISTS (SELECT 1 FROM article_tag_links links WHERE links.tag_id=tags.id)');
+    await client.query('COMMIT');
+    return deleted;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
 }
 
 export async function toggleArticleLike(id: string): Promise<number> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const result = await client.query<{ data: ShelterArticle }>('SELECT data FROM articles WHERE id = $1 FOR UPDATE', [id]);
-    if (!result.rowCount) throw new Error('Article not found');
-    const article = result.rows[0].data;
+    const lock = await client.query('SELECT id FROM articles WHERE id = $1 FOR UPDATE', [id]);
+    if (!lock.rowCount) throw new Error('Article not found');
+    const article = (await readArticles(client)).find((candidate) => candidate.id === id);
+    if (!article) throw new Error('Article not found');
     article.likesCount = (article.likesCount || 0) + 1;
-    await client.query('UPDATE articles SET data = $2, updated_at = now() WHERE id = $1', [id, article]);
+    await writeArticleRecord(client, article, false);
     await client.query('COMMIT');
     return article.likesCount;
   } catch (error) {
@@ -726,25 +780,25 @@ export async function importFullDatabase(bundle: unknown): Promise<{ success: bo
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    if (Array.isArray(payload.applications)) await client.query('DELETE FROM applications');
+    if (Array.isArray(payload.articles)) await client.query('DELETE FROM articles');
     if (Array.isArray(payload.cats)) {
       await client.query('DELETE FROM cats');
       for (const item of payload.cats as Cat[]) {
         const cat = await storeCatMedia(sanitizeCat(item));
-        await client.query('INSERT INTO cats (id, data) VALUES ($1, $2)', [cat.id, cat]);
+        await writeCatRecord(client, cat, true);
       }
     }
     if (Array.isArray(payload.applications)) {
-      await client.query('DELETE FROM applications');
       for (const item of payload.applications as AdoptionApplication[]) {
         const application = await storeApplicationMedia(item);
-        await client.query('INSERT INTO applications (id, owner_id, data) VALUES ($1, $2, $3)', [application.id, 'legacy-import', application]);
+        await writeApplicationRecord(client, 'legacy-import', application, true);
       }
     }
     if (Array.isArray(payload.articles)) {
-      await client.query('DELETE FROM articles');
       for (const item of payload.articles as ShelterArticle[]) {
         const article = await storeArticleMedia(item);
-        await client.query('INSERT INTO articles (id, data) VALUES ($1, $2)', [article.id, article]);
+        await writeArticleRecord(client, article, true);
       }
     }
     await client.query('COMMIT');
