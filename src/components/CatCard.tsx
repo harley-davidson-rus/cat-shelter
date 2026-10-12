@@ -213,14 +213,22 @@ export const CatCard: React.FC<CatCardProps> = ({
 
           {/* Health & Compatibility Badges */}
           <div className="py-2.5 px-3 bg-stone-50 rounded-2xl border border-stone-100 mb-4 flex items-center justify-between text-xs text-stone-600">
-            <div className="flex items-center gap-1" title="Привит и обработан">
+            <div
+              className="flex items-center gap-1"
+              title={cat.gender === 'female' ? 'Привита и обработана' : 'Привит и обработан'}
+            >
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="font-medium text-[11px]">Привит</span>
+              <span className="font-medium text-[11px]">
+                {cat.gender === 'female' ? 'Привита' : 'Привит'}
+              </span>
             </div>
-            <div className="flex items-center gap-1" title="Стерилизован">
+            <div
+              className="flex items-center gap-1"
+              title={cat.gender === 'female' ? 'Кастрирована' : 'Кастрирован'}
+            >
               <Check className="w-3.5 h-3.5 text-emerald-600" />
               <span className="font-medium text-[11px]">
-                {cat.gender === 'male' ? 'Кастрирован' : 'Стерилизована'}
+                {cat.gender === 'female' ? 'Кастрирована' : 'Кастрирован'}
               </span>
             </div>
             <div className="flex items-center gap-1.5" title="Совместимость">

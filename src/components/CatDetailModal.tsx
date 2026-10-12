@@ -499,7 +499,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
               <div className="flex items-center gap-2 p-2 rounded-xl bg-stone-50">
                 <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>
-                  <strong>Кастрация:</strong>{' '}
+                  <strong>Стерилизация:</strong>{' '}
                   {cat.health.sterilized
                     ? cat.gender === 'female' ? 'Кастрирована' : 'Кастрирован'
                     : cat.gender === 'female'
