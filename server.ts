@@ -204,6 +204,7 @@ type SeoPage = {
   keywords?: string[];
   tagLinks?: Array<{ label: string; url: string }>;
   relatedLinks?: Array<{ label: string; description: string; url: string }>;
+  indexable?: boolean;
   structuredData: Record<string, unknown>;
 };
 
@@ -224,6 +225,9 @@ function renderSeoDocument(template: string, page: SeoPage): string {
         '<li style="margin:.75rem 0"><a href="' + escapeHtml(link.url) + '"><strong>' + escapeHtml(link.label) + '</strong></a><br />' + escapeHtml(link.description) + '</li>'
       ).join('') + '</ul></section>'
     : '';
+  const robots = page.indexable === false
+    ? 'noindex, follow'
+    : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1';
   const prerender = [
     '<section id="seo-prerender" data-page-type="' + page.pageType + '" style="max-width:72rem;margin:0 auto;padding:2rem 1rem;font-family:Arial,sans-serif;color:#292524">',
     '<p style="color:#b45309;font-weight:700">' + escapeHtml(page.eyebrow) + '</p>',
@@ -239,6 +243,9 @@ function renderSeoDocument(template: string, page: SeoPage): string {
   return template
     .replace(/<title>[\s\S]*?<\/title>/i, '<title>' + title + '</title>')
     .replace(/<meta name="description"[^>]*>/i, '<meta name="description" content="' + description + '" />')
+    .replace(/<meta name="robots"[^>]*>/i, '<meta name="robots" content="' + robots + '" />')
+    .replace(/<meta name="googlebot"[^>]*>/i, '<meta name="googlebot" content="' + robots + '" />')
+    .replace(/<meta name="yandex"[^>]*>/i, '<meta name="yandex" content="' + (page.indexable === false ? 'noindex, follow' : 'index, follow') + '" />')
     .replace(/<link rel="canonical"[^>]*>/i, '<link rel="canonical" href="' + canonical + '" />')
     .replace(/<meta property="og:title"[^>]*>/i, '<meta property="og:title" content="' + title + '" />')
     .replace(/<meta property="og:description"[^>]*>/i, '<meta property="og:description" content="' + description + '" />')
@@ -345,6 +352,7 @@ function articleTagSeoPage(tag: string, articles: ShelterArticle[]): SeoPage {
     eyebrow: 'Новости и истории фонда «Доброта для кота»',
     body: description,
     keywords: [normalizedTag],
+    indexable: matchingArticles.length >= 2,
     relatedLinks: matchingArticles.map((article) => ({
       label: article.title,
       description: plainText(article.summary, 240),
@@ -360,6 +368,25 @@ function articleTagSeoPage(tag: string, articles: ShelterArticle[]): SeoPage {
       mainEntity: { '@type': 'ItemList', numberOfItems: itemList.length, itemListElement: itemList },
     },
   };
+}
+
+function collectArticleTags(articles: ShelterArticle[]): Array<{ label: string; slug: string; count: number }> {
+  const tags = new Map<string, { label: string; slug: string; articleIds: Set<string> }>();
+  for (const article of articles) {
+    for (const rawTag of article.tags || []) {
+      const label = normalizeArticleTag(rawTag);
+      if (!label) continue;
+      const slug = articleTagSlug(label);
+      const existing = tags.get(slug) || { label, slug, articleIds: new Set<string>() };
+      existing.articleIds.add(article.id);
+      tags.set(slug, existing);
+    }
+  }
+  return Array.from(tags.values()).map((tag) => ({
+    label: tag.label,
+    slug: tag.slug,
+    count: tag.articleIds.size,
+  }));
 }
 
 async function startServer() {
@@ -439,12 +466,9 @@ async function startServer() {
         PUBLIC_ORIGIN + '/',
         ...cats.map((cat) => PUBLIC_ORIGIN + catSeoPath(cat, cats)),
         ...articles.map((article) => PUBLIC_ORIGIN + articleSeoPath(article, articles)),
-        ...Array.from(new Map(
-          articles.flatMap((article) => article.tags || [])
-            .map(normalizeArticleTag)
-            .filter(Boolean)
-            .map((tag) => [articleTagSlug(tag), tag]),
-        ).values()).map((tag) => PUBLIC_ORIGIN + articleTagPath(tag)),
+        ...collectArticleTags(articles)
+          .filter((tag) => tag.count >= 2)
+          .map((tag) => PUBLIC_ORIGIN + articleTagPath(tag.label)),
       ];
       const xml = [
         '<?xml version="1.0" encoding="UTF-8"?>',
