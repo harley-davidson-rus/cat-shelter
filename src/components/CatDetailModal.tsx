@@ -491,21 +491,29 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                 <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>
                   <strong>Вакцинация:</strong>{' '}
-                  {cat.health.vaccinated ? 'Проведена по возрасту' : 'Не проведена'}
+                  {cat.health.vaccinated
+                    ? cat.gender === 'female' ? 'Привита по возрасту' : 'Привит по возрасту'
+                    : cat.gender === 'female' ? 'Не привита' : 'Не привит'}
                 </span>
               </div>
               <div className="flex items-center gap-2 p-2 rounded-xl bg-stone-50">
                 <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>
-                  <strong>Стерилизация:</strong>{' '}
-                  {cat.health.sterilized ? 'Проведена' : 'По возрасту (оплачивает временная передержка)'}
+                  <strong>Кастрация:</strong>{' '}
+                  {cat.health.sterilized
+                    ? cat.gender === 'female' ? 'Кастрирована' : 'Кастрирован'
+                    : cat.gender === 'female'
+                      ? 'Не кастрирована (по возрасту; оплачивает временная передержка)'
+                      : 'Не кастрирован (по возрасту; оплачивает временная передержка)'}
                 </span>
               </div>
               <div className="flex items-center gap-2 p-2 rounded-xl bg-stone-50">
                 <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>
                   <strong>Обработка:</strong>{' '}
-                  {cat.health.parasiteTreated ? 'Проведена' : 'Не проведена'}
+                  {cat.health.parasiteTreated
+                    ? cat.gender === 'female' ? 'Обработана от паразитов' : 'Обработан от паразитов'
+                    : cat.gender === 'female' ? 'Не обработана от паразитов' : 'Не обработан от паразитов'}
                 </span>
               </div>
             </div>

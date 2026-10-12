@@ -991,7 +991,7 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
                   onChange={(e) => setVaccinated(e.target.checked)}
                   className="rounded text-amber-500 focus:ring-amber-400"
                 />
-                <span>Вакцинирован по возрасту</span>
+                <span>Вакцинирован(а) по возрасту</span>
               </label>
 
               <label className="flex items-center gap-2 p-2 rounded-xl bg-white border border-stone-200 cursor-pointer">
@@ -1001,7 +1001,7 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
                   onChange={(e) => setSterilized(e.target.checked)}
                   className="rounded text-amber-500 focus:ring-amber-400"
                 />
-                <span>Стерилизован / кастрирован</span>
+                <span>Кастрирован(а)</span>
               </label>
 
               <label className="flex items-center gap-2 p-2 rounded-xl bg-white border border-stone-200 cursor-pointer">
@@ -1011,7 +1011,7 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
                   onChange={(e) => setParasiteTreated(e.target.checked)}
                   className="rounded text-amber-500 focus:ring-amber-400"
                 />
-                <span>Обработан от паразитов</span>
+                <span>Обработан(а) от паразитов</span>
               </label>
 
             </div>
