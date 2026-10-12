@@ -29,6 +29,7 @@ export interface CatVideo {
 
 export interface Cat {
   id: string;
+  createdAt?: string;
   name: string;
   age: string;
   ageCategory: AgeCategory;
@@ -131,6 +132,7 @@ export type ArticleCategory = 'rescue_story' | 'shelter_success' | 'event';
 
 export interface ShelterArticle {
   id: string;
+  createdAt?: string;
   title: string;
   category: ArticleCategory;
   summary: string;

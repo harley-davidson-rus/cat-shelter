@@ -99,6 +99,11 @@ interface AdminDashboardProps {
 
 type AdminTabId = 'applications' | 'cats' | 'articles' | 'stats' | 'contacts' | 'analytics' | 'database';
 
+const creationTimestamp = (createdAt?: string): number => {
+  const timestamp = createdAt ? Date.parse(createdAt) : Number.NaN;
+  return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
+};
+
 const STATUS_CONFIG: Record<
   ApplicationStatus,
   { label: string; bg: string; text: string; dot: string }
@@ -526,16 +531,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return matchesSearch && matchesStatus;
   });
 
-  // Cats filtering and private curator rating
+  // Cats filtering: curator view is chronological, from oldest to newest.
   const ratingByCatId = new Map(catRatings.map((rating) => [rating.catId, rating]));
   const filteredCats = cats.filter((cat) =>
     cat.name.toLowerCase().includes(catSearchTerm.toLowerCase()) ||
     cat.breed.toLowerCase().includes(catSearchTerm.toLowerCase()) ||
     cat.color.toLowerCase().includes(catSearchTerm.toLowerCase())
-  ).sort((left, right) => {
-    const likesDifference = (ratingByCatId.get(right.id)?.likesCount || 0) - (ratingByCatId.get(left.id)?.likesCount || 0);
-    return likesDifference || left.name.localeCompare(right.name, 'ru');
-  });
+  ).sort((left, right) =>
+    creationTimestamp(left.createdAt) - creationTimestamp(right.createdAt)
+    || left.id.localeCompare(right.id)
+  );
+  const chronologicalArticles = [...articles].sort((left, right) =>
+    creationTimestamp(left.createdAt) - creationTimestamp(right.createdAt)
+    || left.id.localeCompare(right.id)
+  );
 
   React.useEffect(() => {
     if (!isOpen || activeTab !== 'cats' || !newlyAddedCatId) return;
@@ -1329,8 +1338,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* Cats List */}
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                   <div className="flex items-center justify-between gap-3 mb-3">
-                    <h4 className="font-bold text-sm text-stone-900">Рейтинг котиков</h4>
-                    <span className="text-[11px] text-stone-500 text-right">По добавлениям в избранное</span>
+                    <h4 className="font-bold text-sm text-stone-900">Анкеты котиков</h4>
+                    <span className="text-[11px] text-stone-500 text-right">Сначала добавленные ранее</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {filteredCats.map((cat) => (
@@ -1456,7 +1465,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <p className="font-semibold text-sm text-stone-700">Нет публикаций</p>
                     </div>
                   ) : (
-                    articles.map((art) => (
+                    chronologicalArticles.map((art) => (
                       <div
                         key={art.id}
                         id={`admin-article-row-${art.id}`}

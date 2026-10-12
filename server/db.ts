@@ -434,7 +434,7 @@ export async function saveCat(data: Partial<Cat> & { id?: string }): Promise<Cat
     await client.query('ROLLBACK');
     throw error;
   } finally { client.release(); }
-  return cat;
+  return (await readCats(pool)).find((saved) => saved.id === cat.id) || cat;
 }
 
 export async function deleteCat(id: string): Promise<boolean> {
@@ -484,7 +484,7 @@ export async function createArticle(data: Omit<ShelterArticle, 'id' | 'published
     await client.query('ROLLBACK');
     throw error;
   } finally { client.release(); }
-  return article;
+  return (await readArticles(pool)).find((saved) => saved.id === article.id) || article;
 }
 
 export async function updateArticle(id: string, data: Partial<ShelterArticle>): Promise<ShelterArticle | null> {
