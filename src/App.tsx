@@ -12,7 +12,14 @@ import { INITIAL_ARTICLES } from './data/news';
 import { Cat, AdoptionApplication, FilterOptions, ApplicationStatus, ShelterArticle, ShelterStats, SiteContacts, DonationSettings } from './types';
 import { Sparkles, Heart, Search, Check, AlertCircle, Plus, Download, Upload, ArrowUp } from 'lucide-react';
 import { cleanupOldStorageKeys } from './utils/storage';
-import { articleSeoPath, catSeoPath, findBySeoSlug } from './utils/seo';
+import {
+  articleSeoPath,
+  articleTagPath,
+  catSeoPath,
+  findArticleTagBySlug,
+  findBySeoSlug,
+  normalizeArticleTag,
+} from './utils/seo';
 import { sortArticlesNewestFirst } from './utils/articles';
 import {
   apiGetCats,
@@ -158,6 +165,7 @@ export default function App() {
   const [newlyAddedCatId, setNewlyAddedCatId] = useState<string | null>(null);
 
   const [selectedArticleForDetail, setSelectedArticleForDetail] = useState<ShelterArticle | null>(null);
+  const [selectedArticleTag, setSelectedArticleTag] = useState<string | null>(null);
   const [isPublishArticleModalOpen, setIsPublishArticleModalOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState<ShelterArticle | null>(null);
   const [newlyAddedArticleId, setNewlyAddedArticleId] = useState<string | null>(null);
@@ -171,6 +179,7 @@ export default function App() {
   const openCatDetail = (cat: Cat, updateHistory = true) => {
     const targetPath = catSeoPath(cat, cats);
     setSelectedArticleForDetail(null);
+    setSelectedArticleTag(null);
     setSelectedCatForDetail(cat);
     if (updateHistory && window.location.pathname !== targetPath) {
       window.history.pushState({ shelterDetail: true }, '', targetPath);
@@ -180,10 +189,29 @@ export default function App() {
   const openArticleDetail = (article: ShelterArticle, updateHistory = true) => {
     const targetPath = articleSeoPath(article, articles);
     setSelectedCatForDetail(null);
+    setSelectedArticleTag(null);
     setSelectedArticleForDetail(article);
     if (updateHistory && window.location.pathname !== targetPath) {
       window.history.pushState({ shelterDetail: true }, '', targetPath);
     }
+  };
+
+  const openArticleTag = (tag: string, updateHistory = true) => {
+    const normalizedTag = normalizeArticleTag(tag);
+    if (!normalizedTag) return;
+    const targetPath = articleTagPath(normalizedTag);
+    setSelectedCatForDetail(null);
+    setSelectedArticleForDetail(null);
+    setSelectedArticleTag(normalizedTag);
+    if (updateHistory && window.location.pathname !== targetPath) {
+      window.history.pushState({ shelterTag: true }, '', targetPath);
+    }
+    window.setTimeout(() => document.getElementById('news')?.scrollIntoView({ behavior: 'smooth' }), 0);
+  };
+
+  const clearArticleTag = () => {
+    setSelectedArticleTag(null);
+    window.history.pushState(null, '', '/#news');
   };
 
   const leaveDetailPath = (anchor: '#cats' | '#news') => {
@@ -208,11 +236,21 @@ export default function App() {
     if (!catsLoaded) return;
 
     const syncDetailWithAddress = () => {
+      const tagMatch = window.location.pathname.match(/^\/news\/tag\/([^/]+)\/?$/);
+      if (tagMatch) {
+        const tag = findArticleTagBySlug(tagMatch[1], articles);
+        setSelectedArticleTag(tag || null);
+        setSelectedCatForDetail(null);
+        setSelectedArticleForDetail(null);
+        return;
+      }
+
       const catMatch = window.location.pathname.match(/^\/cats\/([^/]+)\/?$/);
       if (catMatch) {
         const cat = findBySeoSlug(catMatch[1], cats, (candidate) => candidate.name, 'kotik');
         setSelectedCatForDetail(cat || null);
         setSelectedArticleForDetail(null);
+        setSelectedArticleTag(null);
         return;
       }
 
@@ -221,11 +259,13 @@ export default function App() {
         const article = findBySeoSlug(articleMatch[1], articles, (candidate) => candidate.title, 'novost');
         setSelectedArticleForDetail(article || null);
         setSelectedCatForDetail(null);
+        setSelectedArticleTag(null);
         return;
       }
 
       setSelectedCatForDetail(null);
       setSelectedArticleForDetail(null);
+      setSelectedArticleTag(null);
     };
 
     syncDetailWithAddress();
@@ -240,18 +280,24 @@ export default function App() {
       ? selectedCatForDetail.name + ' ищет дом в Санкт-Петербурге — Доброта для кота'
       : selectedArticleForDetail
         ? selectedArticleForDetail.title + ' — Доброта для кота'
-        : homeTitle;
+        : selectedArticleTag
+          ? '#' + selectedArticleTag + ' — новости фонда «Доброта для кота»'
+          : homeTitle;
     const description = selectedCatForDetail
       ? (selectedCatForDetail.story || selectedCatForDetail.breed + ', ' + selectedCatForDetail.age).slice(0, 180)
       : selectedArticleForDetail
         ? selectedArticleForDetail.summary.slice(0, 180)
-        : homeDescription;
+        : selectedArticleTag
+          ? 'Новости, истории и мероприятия фонда «Доброта для кота» по теме «' + selectedArticleTag + '».'
+          : homeDescription;
     const canonical = 'https://kind4cat.ru' + (
       selectedCatForDetail
         ? catSeoPath(selectedCatForDetail, cats)
         : selectedArticleForDetail
           ? articleSeoPath(selectedArticleForDetail, articles)
-          : '/'
+          : selectedArticleTag
+            ? articleTagPath(selectedArticleTag)
+            : '/'
     );
 
     document.title = title;
@@ -260,12 +306,24 @@ export default function App() {
     const ogTitle = document.querySelector<HTMLMetaElement>('meta[property="og:title"]');
     const ogDescription = document.querySelector<HTMLMetaElement>('meta[property="og:description"]');
     const ogUrl = document.querySelector<HTMLMetaElement>('meta[property="og:url"]');
+    let keywordsElement = document.querySelector<HTMLMetaElement>('meta[name="keywords"]');
+    const keywords = selectedArticleForDetail?.tags?.map(normalizeArticleTag).filter(Boolean)
+      || (selectedArticleTag ? [selectedArticleTag] : []);
+    if (keywords.length && !keywordsElement) {
+      keywordsElement = document.createElement('meta');
+      keywordsElement.name = 'keywords';
+      document.head.appendChild(keywordsElement);
+    }
+    if (keywordsElement) {
+      if (keywords.length) keywordsElement.content = keywords.join(', ');
+      else keywordsElement.remove();
+    }
     if (descriptionElement) descriptionElement.content = description;
     if (canonicalElement) canonicalElement.href = canonical;
     if (ogTitle) ogTitle.content = title;
     if (ogDescription) ogDescription.content = description;
     if (ogUrl) ogUrl.content = canonical;
-  }, [articles, cats, selectedArticleForDetail, selectedCatForDetail]);
+  }, [articles, cats, selectedArticleForDetail, selectedArticleTag, selectedCatForDetail]);
 
   // On mount: cleanup obsolete browser storage and load all records from local computer database file
   useEffect(() => {
@@ -661,6 +719,10 @@ export default function App() {
   const myApplications = applications;
 
   const sortedArticles = useMemo(() => sortArticlesNewestFirst(articles), [articles]);
+  const visibleArticles = useMemo(() => selectedArticleTag
+    ? sortedArticles.filter((article) => (article.tags || []).some((tag) => articleTagPath(tag) === articleTagPath(selectedArticleTag)))
+    : sortedArticles,
+  [selectedArticleTag, sortedArticles]);
 
   // Derived favorite cats
   const favoriteCats = useMemo(() => {
@@ -818,12 +880,16 @@ export default function App() {
 
       {/* News, Stories & Events Section */}
       <NewsSection
-        articles={sortedArticles}
+        articles={visibleArticles}
         likedArticleIds={likedArticleIds}
         onToggleLike={handleToggleArticleLike}
         onReadArticle={openArticleDetail}
         allCats={cats}
         getArticleHref={(article) => articleSeoPath(article, articles)}
+        activeTag={selectedArticleTag}
+        getTagHref={articleTagPath}
+        onSelectTag={openArticleTag}
+        onClearTag={clearArticleTag}
       />
 
       {/* Rules & Process Section */}
@@ -877,6 +943,8 @@ export default function App() {
             : null
         }
         onViewRelatedCat={openCatDetail}
+        getTagHref={articleTagPath}
+        onSelectTag={openArticleTag}
       />}
 
       {/* Publish Article Modal (Publish rescue story, success, or event) */}

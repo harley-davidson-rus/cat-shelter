@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Calendar, MapPin, Clock, User, Heart, Share2, Sparkles, Tag, ArrowRight } from 'lucide-react';
 import { ShelterArticle, Cat } from '../types';
 import { ArticleContent } from './ArticleContent';
+import { normalizeArticleTag } from '../utils/seo';
 
 interface ArticleDetailModalProps {
   article: ShelterArticle | null;
@@ -11,6 +12,8 @@ interface ArticleDetailModalProps {
   isLiked: boolean;
   relatedCat?: Cat | null;
   onViewRelatedCat?: (cat: Cat) => void;
+  getTagHref?: (tag: string) => string;
+  onSelectTag?: (tag: string) => void;
 }
 
 const CATEGORY_STYLES = {
@@ -36,6 +39,8 @@ export const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({
   isLiked,
   relatedCat,
   onViewRelatedCat,
+  getTagHref,
+  onSelectTag,
 }) => {
   if (!isOpen || !article) return null;
 
@@ -234,12 +239,17 @@ export const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({
             <div className="flex flex-wrap items-center gap-1.5 pt-4 border-t border-stone-100">
               <Tag className="w-3.5 h-3.5 text-stone-400 mr-1" />
               {article.tags.map((tag, idx) => (
-                <span
+                <a
                   key={idx}
+                  href={getTagHref?.(tag)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onSelectTag?.(tag);
+                  }}
                   className="px-2.5 py-1 rounded-lg bg-stone-100 text-stone-600 text-xs font-medium"
                 >
-                  #{tag}
-                </span>
+                  #{normalizeArticleTag(tag)}
+                </a>
               ))}
             </div>
           )}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Newspaper, PenTool, Calendar, Clock, Heart, ArrowRight, Sparkles, User, Tag } from 'lucide-react';
 import { ShelterArticle, ArticleCategory, Cat } from '../types';
+import { normalizeArticleTag } from '../utils/seo';
 
 interface NewsSectionProps {
   articles: ShelterArticle[];
@@ -10,6 +11,10 @@ interface NewsSectionProps {
   onOpenPublishModal?: () => void;
   allCats: Cat[];
   getArticleHref?: (article: ShelterArticle) => string;
+  activeTag?: string | null;
+  getTagHref?: (tag: string) => string;
+  onSelectTag?: (tag: string) => void;
+  onClearTag?: () => void;
 }
 
 
@@ -27,6 +32,10 @@ export const NewsSection: React.FC<NewsSectionProps> = ({
   onOpenPublishModal,
   allCats,
   getArticleHref,
+  activeTag,
+  getTagHref,
+  onSelectTag,
+  onClearTag,
 }) => {
 
   return (
@@ -58,6 +67,21 @@ export const NewsSection: React.FC<NewsSectionProps> = ({
             </button>
           )}
         </div>
+
+        {activeTag && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-semibold text-stone-800">
+              Публикации по теме <span className="text-amber-700">#{activeTag}</span>
+            </p>
+            <button
+              type="button"
+              onClick={onClearTag}
+              className="rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-stone-700 shadow-xs ring-1 ring-stone-200 hover:bg-stone-50"
+            >
+              Показать все новости
+            </button>
+          </div>
+        )}
 
         {/* Articles Grid */}
         {articles.length === 0 ? (
@@ -164,12 +188,18 @@ export const NewsSection: React.FC<NewsSectionProps> = ({
                       {/* Tags */}
                       <div className="flex flex-wrap gap-1 mb-4">
                         {article.tags.slice(0, 3).map((tag, idx) => (
-                          <span
+                          <a
                             key={idx}
+                            href={getTagHref?.(tag)}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onSelectTag?.(tag);
+                            }}
                             className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 text-[11px] font-medium"
                           >
-                            #{tag}
-                          </span>
+                            #{normalizeArticleTag(tag)}
+                          </a>
                         ))}
                       </div>
                     </div>

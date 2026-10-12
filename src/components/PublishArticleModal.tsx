@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, PenTool, Image as ImageIcon, Calendar, MapPin, Tag, Sparkles, Upload, Images, Trash2, Star, Video, Link } from 'lucide-react';
 import { ShelterArticle, ArticleCategory, CatVideo } from '../types';
 import { compressImageFile } from '../utils/storage';
+import { articleTagSlug, normalizeArticleTag } from '../utils/seo';
 
 interface PublishArticleModalProps {
   isOpen: boolean;
@@ -228,8 +229,9 @@ export const PublishArticleModal: React.FC<PublishArticleModalProps> = ({
 
     const tags = tagsInput
       .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean);
+      .map(normalizeArticleTag)
+      .filter(Boolean)
+      .filter((tag, index, allTags) => allTags.findIndex((candidate) => articleTagSlug(candidate) === articleTagSlug(tag)) === index);
 
     setIsSaving(true);
     try {

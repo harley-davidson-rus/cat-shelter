@@ -31,7 +31,15 @@ import {
   startAutomaticBackupScheduler,
 } from './server/backupScheduler';
 import type { Cat, ShelterArticle } from './src/types';
-import { articleSeoPath, catSeoPath, findBySeoSlug } from './src/utils/seo';
+import {
+  articleSeoPath,
+  articleTagPath,
+  articleTagSlug,
+  catSeoPath,
+  findArticleTagBySlug,
+  findBySeoSlug,
+  normalizeArticleTag,
+} from './src/utils/seo';
 
 const ADMIN_COOKIE = 'shelter_admin_session';
 const VISITOR_COOKIE = 'shelter_visitor';
@@ -189,10 +197,13 @@ type SeoPage = {
   description: string;
   canonical: string;
   image: string;
-  pageType: 'profile' | 'article';
+  pageType: 'profile' | 'article' | 'collection';
   heading: string;
   eyebrow: string;
   body: string;
+  keywords?: string[];
+  tagLinks?: Array<{ label: string; url: string }>;
+  relatedLinks?: Array<{ label: string; description: string; url: string }>;
   structuredData: Record<string, unknown>;
 };
 
@@ -202,12 +213,25 @@ function renderSeoDocument(template: string, page: SeoPage): string {
   const canonical = escapeHtml(page.canonical);
   const image = escapeHtml(page.image);
   const structuredData = JSON.stringify(page.structuredData).replace(/<\//g, '<\\/');
+  const keywords = (page.keywords || []).map(normalizeArticleTag).filter(Boolean);
+  const tags = page.tagLinks?.length
+    ? '<nav aria-label="Темы публикации" style="display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0">' + page.tagLinks.map((tag) =>
+        '<a href="' + escapeHtml(tag.url) + '" style="padding:.4rem .65rem;border-radius:.5rem;background:#f5f5f4;color:#57534e">#' + escapeHtml(tag.label) + '</a>'
+      ).join('') + '</nav>'
+    : '';
+  const related = page.relatedLinks?.length
+    ? '<section aria-label="Публикации по теме"><h2>Публикации по теме</h2><ul>' + page.relatedLinks.map((link) =>
+        '<li style="margin:.75rem 0"><a href="' + escapeHtml(link.url) + '"><strong>' + escapeHtml(link.label) + '</strong></a><br />' + escapeHtml(link.description) + '</li>'
+      ).join('') + '</ul></section>'
+    : '';
   const prerender = [
     '<section id="seo-prerender" data-page-type="' + page.pageType + '" style="max-width:72rem;margin:0 auto;padding:2rem 1rem;font-family:Arial,sans-serif;color:#292524">',
     '<p style="color:#b45309;font-weight:700">' + escapeHtml(page.eyebrow) + '</p>',
     '<h1>' + escapeHtml(page.heading) + '</h1>',
     '<img src="' + image + '" alt="' + escapeHtml(page.heading) + '" style="max-width:38rem;width:100%;height:auto;border-radius:1.5rem" />',
     '<p style="max-width:52rem;line-height:1.7">' + escapeHtml(page.body) + '</p>',
+    tags,
+    related,
     '<p><a href="/">Все котики и новости фонда «Доброта для кота»</a></p>',
     '</section>',
   ].join('');
@@ -218,10 +242,10 @@ function renderSeoDocument(template: string, page: SeoPage): string {
     .replace(/<link rel="canonical"[^>]*>/i, '<link rel="canonical" href="' + canonical + '" />')
     .replace(/<meta property="og:title"[^>]*>/i, '<meta property="og:title" content="' + title + '" />')
     .replace(/<meta property="og:description"[^>]*>/i, '<meta property="og:description" content="' + description + '" />')
-    .replace(/<meta property="og:type"[^>]*>/i, '<meta property="og:type" content="' + (page.pageType === 'article' ? 'article' : 'profile') + '" />')
+    .replace(/<meta property="og:type"[^>]*>/i, '<meta property="og:type" content="' + (page.pageType === 'article' ? 'article' : 'website') + '" />')
     .replace(/<meta property="og:url"[^>]*>/i, '<meta property="og:url" content="' + canonical + '" />')
     .replace(/<meta property="og:image"[^>]*>/i, '<meta property="og:image" content="' + image + '" />')
-    .replace('</head>', '<script type="application/ld+json">' + structuredData + '</script></head>')
+    .replace('</head>', (keywords.length ? '<meta name="keywords" content="' + escapeHtml(keywords.join(', ')) + '" />' : '') + '<script type="application/ld+json">' + structuredData + '</script></head>')
     .replace('<div id="root"></div>', prerender + '<div id="root"></div>');
 }
 
@@ -261,6 +285,12 @@ function articleSeoPage(article: ShelterArticle, articles: ShelterArticle[]): Se
   const description = plainText(article.summary || article.content);
   const body = plainText(article.content, 1000) || description;
   const image = publicImageUrl(article.coverImage);
+  const tags = Array.from(new Map(
+    (article.tags || [])
+      .map(normalizeArticleTag)
+      .filter(Boolean)
+      .map((tag) => [articleTagSlug(tag), tag]),
+  ).values());
   return {
     title: article.title + ' — Доброта для кота',
     description,
@@ -270,11 +300,14 @@ function articleSeoPage(article: ShelterArticle, articles: ShelterArticle[]): Se
     heading: article.title,
     eyebrow: 'Новости и истории фонда «Доброта для кота»',
     body,
+    keywords: tags,
+    tagLinks: tags.map((tag) => ({ label: tag, url: articleTagPath(tag) })),
     structuredData: {
       '@context': 'https://schema.org',
       '@type': 'Article',
       headline: article.title,
       description,
+      keywords: tags,
       image: [image],
       datePublished: article.publishedAt,
       author: { '@type': 'Person', name: article.author },
@@ -284,6 +317,47 @@ function articleSeoPage(article: ShelterArticle, articles: ShelterArticle[]): Se
         logo: { '@type': 'ImageObject', url: PUBLIC_ORIGIN + '/favicon.svg' },
       },
       mainEntityOfPage: canonical,
+    },
+  };
+}
+
+function articleTagSeoPage(tag: string, articles: ShelterArticle[]): SeoPage {
+  const normalizedTag = normalizeArticleTag(tag);
+  const matchingArticles = articles.filter((article) =>
+    (article.tags || []).some((candidate) => articleTagSlug(candidate) === articleTagSlug(normalizedTag)),
+  );
+  const canonical = PUBLIC_ORIGIN + articleTagPath(normalizedTag);
+  const description = 'Новости, истории и мероприятия фонда «Доброта для кота» по теме «' + normalizedTag + '».';
+  const itemList = matchingArticles.map((article, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    url: PUBLIC_ORIGIN + articleSeoPath(article, articles),
+    name: article.title,
+  }));
+
+  return {
+    title: '#' + normalizedTag + ' — новости фонда «Доброта для кота»',
+    description,
+    canonical,
+    image: publicImageUrl(matchingArticles[0]?.coverImage),
+    pageType: 'collection',
+    heading: 'Публикации по теме #' + normalizedTag,
+    eyebrow: 'Новости и истории фонда «Доброта для кота»',
+    body: description,
+    keywords: [normalizedTag],
+    relatedLinks: matchingArticles.map((article) => ({
+      label: article.title,
+      description: plainText(article.summary, 240),
+      url: articleSeoPath(article, articles),
+    })),
+    structuredData: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: 'Публикации по теме ' + normalizedTag,
+      description,
+      url: canonical,
+      isPartOf: { '@type': 'WebSite', name: 'Доброта для кота', url: PUBLIC_ORIGIN + '/' },
+      mainEntity: { '@type': 'ItemList', numberOfItems: itemList.length, itemListElement: itemList },
     },
   };
 }
@@ -365,6 +439,12 @@ async function startServer() {
         PUBLIC_ORIGIN + '/',
         ...cats.map((cat) => PUBLIC_ORIGIN + catSeoPath(cat, cats)),
         ...articles.map((article) => PUBLIC_ORIGIN + articleSeoPath(article, articles)),
+        ...Array.from(new Map(
+          articles.flatMap((article) => article.tags || [])
+            .map(normalizeArticleTag)
+            .filter(Boolean)
+            .map((tag) => [articleTagSlug(tag), tag]),
+        ).values()).map((tag) => PUBLIC_ORIGIN + articleTagPath(tag)),
       ];
       const xml = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -617,6 +697,22 @@ async function startServer() {
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
     const indexTemplate = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
+    app.get('/news/tag/:tag', async (req, res, next) => {
+      try {
+        const articles = await getAllArticles();
+        const tag = findArticleTagBySlug(req.params.tag, articles);
+        if (!tag) {
+          res.status(404).type('text/plain').send('Тема не найдена');
+          return;
+        }
+        res
+          .set('Cache-Control', 'public, max-age=300')
+          .type('text/html')
+          .send(renderSeoDocument(indexTemplate, articleTagSeoPage(tag, articles)));
+      } catch (error) {
+        next(error);
+      }
+    });
     app.get(['/cats/:slug', '/news/:slug'], async (req, res, next) => {
       try {
         const [cats, articles] = await Promise.all([getAllCats(), getAllArticles()]);

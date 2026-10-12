@@ -71,3 +71,32 @@ export function catSeoPath<T extends SeoEntity & { name: string }>(cat: T, cats:
 export function articleSeoPath<T extends SeoEntity & { title: string }>(article: T, articles: T[]): string {
   return '/news/' + uniqueSeoSlug(article, articles, (candidate) => candidate.title, 'novost');
 }
+
+export function normalizeArticleTag(value: string): string {
+  return value.trim().replace(/^#+\s*/, '').replace(/\s+/g, ' ');
+}
+
+export function articleTagSlug(tag: string): string {
+  return seoSlug(normalizeArticleTag(tag), 'tema');
+}
+
+export function articleTagPath(tag: string): string {
+  return '/news/tag/' + articleTagSlug(tag);
+}
+
+export function findArticleTagBySlug<T extends { tags: string[] }>(slug: string, articles: T[]): string | undefined {
+  let decoded = slug;
+  try {
+    decoded = decodeURIComponent(slug);
+  } catch {
+    // Keep the original value when a malformed URL reaches the client.
+  }
+
+  const tags = articles
+    .flatMap((article) => article.tags || [])
+    .map(normalizeArticleTag)
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right, 'ru'));
+
+  return tags.find((tag) => articleTagSlug(tag) === decoded);
+}
