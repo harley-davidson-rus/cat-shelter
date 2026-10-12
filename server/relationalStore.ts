@@ -275,11 +275,9 @@ export async function writeCatRecord(db: DatabaseClient, cat: Cat, insert: boole
 
 export async function readCats(db: DatabaseClient): Promise<Cat[]> {
   const result = await db.query<CatRow>('SELECT * FROM cats ORDER BY created_at DESC, id DESC');
-  const [traits, photos, videos] = await Promise.all([
-    db.query('SELECT cat_id, position, trait FROM cat_character_traits ORDER BY cat_id, position'),
-    db.query('SELECT cat_id, position, url FROM cat_photos ORDER BY cat_id, position'),
-    db.query('SELECT cat_id, video_id, position, url, title, duration, thumbnail_url, is_short FROM cat_videos ORDER BY cat_id, position'),
-  ]);
+  const traits = await db.query('SELECT cat_id, position, trait FROM cat_character_traits ORDER BY cat_id, position');
+  const photos = await db.query('SELECT cat_id, position, url FROM cat_photos ORDER BY cat_id, position');
+  const videos = await db.query('SELECT cat_id, video_id, position, url, title, duration, thumbnail_url, is_short FROM cat_videos ORDER BY cat_id, position');
   return result.rows.map((row) => ({
     id: row.id, name: row.name, age: row.age, ageCategory: row.age_category, gender: row.gender, size: row.size,
     weightKg: row.weight_kg ?? undefined, temperament: row.temperament, color: row.color, breed: row.breed,
@@ -343,11 +341,9 @@ export async function writeArticleRecord(db: DatabaseClient, article: ShelterArt
 
 export async function readArticles(db: DatabaseClient): Promise<ShelterArticle[]> {
   const result = await db.query<ArticleRow>('SELECT * FROM articles ORDER BY created_at DESC, id DESC');
-  const [images, videos, tags] = await Promise.all([
-    db.query('SELECT article_id, role, position, url FROM article_images ORDER BY article_id, role, position'),
-    db.query('SELECT article_id, video_id, position, url, title, duration, thumbnail_url, is_short FROM article_videos ORDER BY article_id, position'),
-    db.query('SELECT links.article_id, links.position, tags.name FROM article_tag_links links JOIN tags ON tags.id=links.tag_id ORDER BY links.article_id, links.position'),
-  ]);
+  const images = await db.query('SELECT article_id, role, position, url FROM article_images ORDER BY article_id, role, position');
+  const videos = await db.query('SELECT article_id, video_id, position, url, title, duration, thumbnail_url, is_short FROM article_videos ORDER BY article_id, position');
+  const tags = await db.query('SELECT links.article_id, links.position, tags.name FROM article_tag_links links JOIN tags ON tags.id=links.tag_id ORDER BY links.article_id, links.position');
   return result.rows.map((row) => {
     const articleImages = images.rows.filter((item) => item.article_id === row.id);
     return {

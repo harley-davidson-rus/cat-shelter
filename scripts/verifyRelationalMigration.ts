@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import pg from 'pg';
 import {
-  ensureRelationalSchema,
   readApplications,
   readArticles,
   readCats,
@@ -21,21 +20,15 @@ const config = {
 };
 
 async function main() {
-  const test = new pg.Pool({ ...config, max: 1 });
-  await test.query('SET search_path TO pg_temp, public');
-  for (const table of ['cats', 'articles', 'applications', 'media_assets']) {
-    await test.query('CREATE TEMP TABLE ' + table + ' (LIKE public.' + table + ' INCLUDING ALL)');
-    await test.query('INSERT INTO ' + table + ' SELECT * FROM public.' + table);
-  }
+  const pool = new pg.Pool({ ...config, max: 1 });
+  const test = await pool.connect();
+  await test.query('BEGIN');
   try {
-    await ensureRelationalSchema(test);
-    const [cats, articles, applications, sourceCats, sourceArticles] = await Promise.all([
-      readCats(test),
-      readArticles(test),
-      readApplications(test),
-      test.query<{ data: Record<string, any> }>('SELECT data FROM public.cats ORDER BY id'),
-      test.query<{ data: Record<string, any> }>('SELECT data FROM public.articles ORDER BY id'),
-    ]);
+    const cats = await readCats(test);
+    const articles = await readArticles(test);
+    const applications = await readApplications(test);
+    const sourceCats = await test.query<{ data: Record<string, any> }>('SELECT data FROM public.cats ORDER BY id');
+    const sourceArticles = await test.query<{ data: Record<string, any> }>('SELECT data FROM public.articles ORDER BY id');
     const catById = new Map(cats.map((cat) => [cat.id, cat]));
     const articleById = new Map(articles.map((article) => [article.id, article]));
     const catMismatches = sourceCats.rows.filter(({ data: source }) => {
@@ -69,7 +62,7 @@ async function main() {
     const foreignKeys = (await test.query<{ count: number }>(`
       SELECT count(*)::int AS count
       FROM information_schema.table_constraints
-      WHERE table_schema LIKE 'pg_temp%' AND constraint_type='FOREIGN KEY'
+      WHERE table_schema = 'public' AND constraint_type='FOREIGN KEY'
     `)).rows[0].count;
     const sampleCat = { ...cats[0], id: 'verification-cat', name: 'Проверка миграции', photos: [...cats[0].photos] };
     await writeCatRecord(test, sampleCat, true);
@@ -83,6 +76,16 @@ async function main() {
       tags: ['Проверка', 'База данных'],
     };
     await writeArticleRecord(test, sampleArticle, true);
+    const articleCreatedAtBeforeUpdate = (await test.query<{ created_at: Date }>(
+      'SELECT created_at FROM articles WHERE id=$1',
+      [sampleArticle.id],
+    )).rows[0].created_at;
+    sampleArticle.title = 'Проверка связей после редактирования';
+    await writeArticleRecord(test, sampleArticle, false);
+    const articleCreatedAtAfterUpdate = (await test.query<{ created_at: Date }>(
+      'SELECT created_at FROM articles WHERE id=$1',
+      [sampleArticle.id],
+    )).rows[0].created_at;
     const sampleApplication = {
       id: 'verification-application', catId: sampleCat.id, catName: sampleCat.name,
       applicantName: 'Тест', phone: '+70000000000', email: 'test@example.com', city: 'Санкт-Петербург',
@@ -98,14 +101,24 @@ async function main() {
     `)).rows[0];
     const writeReadResult = {
       catStatusBeforeDelete: 'reserved',
+      articleCreatedAtPreservedOnUpdate:
+        articleCreatedAtBeforeUpdate.getTime() === articleCreatedAtAfterUpdate.getTime(),
       articleDetachedAfterCatDelete: relationResult.article_detached,
       applicationDetachedAfterCatDelete: relationResult.application_detached,
     };
     const result = { counts, applications: applications.length, foreignKeys, catMismatches, articleMismatches, writeReadResult };
     console.log(JSON.stringify(result, null, 2));
-    if (catMismatches.length || articleMismatches.length) process.exitCode = 1;
+    if (
+      catMismatches.length
+      || articleMismatches.length
+      || !writeReadResult.articleCreatedAtPreservedOnUpdate
+      || !writeReadResult.articleDetachedAfterCatDelete
+      || !writeReadResult.applicationDetachedAfterCatDelete
+    ) process.exitCode = 1;
   } finally {
-    await test.end();
+    await test.query('ROLLBACK');
+    test.release();
+    await pool.end();
   }
 }
 
