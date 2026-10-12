@@ -156,6 +156,7 @@ export async function ensureRelationalSchema(pool: Pool): Promise<void> {
     CREATE INDEX IF NOT EXISTS cats_status_idx ON cats(status);
     CREATE INDEX IF NOT EXISTS cats_featured_idx ON cats(featured) WHERE featured = true;
     CREATE INDEX IF NOT EXISTS cats_updated_at_idx ON cats(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS cats_created_at_idx ON cats(created_at DESC);
     CREATE INDEX IF NOT EXISTS articles_published_idx ON articles(created_at DESC);
     CREATE INDEX IF NOT EXISTS articles_category_idx ON articles(category);
     CREATE INDEX IF NOT EXISTS applications_status_idx ON applications(status);
@@ -273,7 +274,7 @@ export async function writeCatRecord(db: DatabaseClient, cat: Cat, insert: boole
 }
 
 export async function readCats(db: DatabaseClient): Promise<Cat[]> {
-  const result = await db.query<CatRow>('SELECT * FROM cats ORDER BY updated_at DESC');
+  const result = await db.query<CatRow>('SELECT * FROM cats ORDER BY created_at DESC, id DESC');
   const [traits, photos, videos] = await Promise.all([
     db.query('SELECT cat_id, position, trait FROM cat_character_traits ORDER BY cat_id, position'),
     db.query('SELECT cat_id, position, url FROM cat_photos ORDER BY cat_id, position'),
