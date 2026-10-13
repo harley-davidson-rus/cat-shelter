@@ -221,12 +221,13 @@ export const CatFilter: React.FC<CatFilterProps> = ({
         {/* Status switch */}
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-stone-500">Статус:</span>
-          <div className="inline-flex p-1 bg-stone-100 rounded-xl">
-            {(['all', 'available', 'reserved'] as const).map((statusOption) => {
+          <div className="flex flex-wrap p-1 bg-stone-100 rounded-xl">
+            {(['all', 'available', 'reserved', 'trial'] as const).map((statusOption) => {
               const labels = {
                 all: 'Все',
                 available: 'Ищут дом',
                 reserved: 'Бронь',
+                trial: 'Испытательный срок',
               };
               const isSelected = filters.status === statusOption;
               return (

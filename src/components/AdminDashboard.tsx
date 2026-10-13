@@ -1380,10 +1380,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
                                   cat.status === 'available'
                                     ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-amber-100 text-amber-800'
+                                    : cat.status === 'reserved'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : cat.status === 'trial'
+                                        ? 'bg-sky-100 text-sky-800'
+                                        : 'bg-stone-200 text-stone-700'
                                 }`}
                               >
-                                {cat.status === 'available' ? 'Ищет дом' : 'На бронировании'}
+                                {cat.status === 'available'
+                                  ? 'Ищет дом'
+                                  : cat.status === 'reserved'
+                                    ? 'На бронировании'
+                                    : cat.status === 'trial'
+                                      ? 'На испытательном сроке'
+                                      : 'Уже дома'}
                               </span>
                             </div>
                             <p className="text-xs text-stone-500 mt-1 line-clamp-2 sm:truncate">

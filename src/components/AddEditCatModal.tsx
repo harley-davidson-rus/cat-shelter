@@ -854,6 +854,7 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
               >
                 <option value="available">Ищет дом</option>
                 <option value="reserved">На бронировании</option>
+                <option value="trial">На испытательном сроке</option>
                 <option value="adopted">Уже дома</option>
               </select>
             </div>

@@ -207,7 +207,15 @@ async function addRelationalConstraints(pool: Pool): Promise<void> {
         ALTER TABLE cats ADD CONSTRAINT cats_gender_check CHECK (gender IN ('male','female'));
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cats_status_check') THEN
-        ALTER TABLE cats ADD CONSTRAINT cats_status_check CHECK (status IN ('available','reserved','adopted'));
+        ALTER TABLE cats ADD CONSTRAINT cats_status_check CHECK (status IN ('available','reserved','trial','adopted'));
+      ELSIF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'cats_status_check'
+          AND pg_get_constraintdef(oid) LIKE '%trial%'
+      ) THEN
+        ALTER TABLE cats DROP CONSTRAINT cats_status_check;
+        ALTER TABLE cats ADD CONSTRAINT cats_status_check CHECK (status IN ('available','reserved','trial','adopted'));
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'articles_category_check') THEN
         ALTER TABLE articles ADD CONSTRAINT articles_category_check CHECK (category IN ('rescue_story','shelter_success','event'));

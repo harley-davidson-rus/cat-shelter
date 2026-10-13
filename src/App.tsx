@@ -419,7 +419,9 @@ export default function App() {
       showToast(
         cat.status === 'reserved'
           ? `${cat.name} сейчас на бронировании — подать заявку нельзя`
-          : `${cat.name} уже дома — приём заявок закрыт`,
+          : cat.status === 'trial'
+            ? `${cat.name} сейчас на испытательном сроке — подать заявку нельзя`
+            : `${cat.name} уже дома — приём заявок закрыт`,
       );
       return;
     }

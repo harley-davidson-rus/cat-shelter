@@ -84,6 +84,13 @@ export const CatCard: React.FC<CatCardProps> = ({
   searchQuery = '',
 }) => {
   const isAvailable = cat.status === 'available';
+  const statusLabel = cat.status === 'available'
+    ? 'Ищет дом'
+    : cat.status === 'reserved'
+      ? 'На бронировании'
+      : cat.status === 'trial'
+        ? 'На испытательном сроке'
+        : 'Уже дома';
   const hasVideos = cat.videos && cat.videos.length > 0;
   const normalizedSearch = normalizeSearch(searchQuery);
   const storyMatches = Boolean(normalizedSearch && cat.story.toLocaleLowerCase('ru').includes(normalizedSearch));
@@ -141,10 +148,14 @@ export const CatCard: React.FC<CatCardProps> = ({
                 className={`px-2 py-0.5 rounded-full text-[11px] font-bold shadow-sm backdrop-blur-md ${
                   isAvailable
                     ? 'bg-emerald-500/90 text-white'
-                    : 'bg-amber-500/90 text-white'
+                    : cat.status === 'reserved'
+                      ? 'bg-amber-500/90 text-white'
+                      : cat.status === 'trial'
+                        ? 'bg-sky-600/90 text-white'
+                        : 'bg-stone-600/90 text-white'
                 }`}
               >
-                {isAvailable ? 'Ищет дом' : 'На бронировании'}
+                {statusLabel}
               </span>
               {/* Gender Badge */}
               <span

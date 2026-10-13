@@ -1,6 +1,6 @@
 export type AgeCategory = 'kitten' | 'young' | 'adult' | 'senior';
 export type CatGender = 'male' | 'female';
-export type CatStatus = 'available' | 'reserved' | 'adopted';
+export type CatStatus = 'available' | 'reserved' | 'trial' | 'adopted';
 export type CatSize = 'small' | 'medium' | 'large';
 export type CatTemperament = 'cuddly' | 'playful' | 'calm' | 'independent' | 'curious';
 
@@ -125,7 +125,7 @@ export interface FilterOptions {
   goodWithDogs: boolean;
   vaccinatedOnly: boolean;
   sterilizedOnly: boolean;
-  status: 'all' | 'available' | 'reserved';
+  status: 'all' | 'available' | 'reserved' | 'trial';
 }
 
 export type ArticleCategory = 'rescue_story' | 'shelter_success' | 'event';

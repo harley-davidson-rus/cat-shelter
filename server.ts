@@ -543,7 +543,9 @@ async function startServer() {
       if (cat.status !== 'available') {
         const message = cat.status === 'reserved'
           ? 'Этот котик сейчас на бронировании. Приём заявок закрыт.'
-          : 'Этот котик уже дома. Приём заявок закрыт.';
+          : cat.status === 'trial'
+            ? 'Этот котик сейчас на испытательном сроке. Приём заявок закрыт.'
+            : 'Этот котик уже дома. Приём заявок закрыт.';
         return res.status(409).json({ error: message });
       }
       res.status(201).json(await createApplication(req.visitorId as string, data as never));
