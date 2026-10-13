@@ -6,9 +6,9 @@ import shelterAboutImageBottom from '../assets/images/regenerated_image_17900205
 
 export const ShelterAboutSection: React.FC<{ contacts: SiteContacts }> = ({ contacts }) => {
   return (
-    <section id="about" className="py-16 sm:py-20 bg-white">
+    <section className="py-16 sm:py-20 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        <div id="about" className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           {/* Photos Collage */}
           <div className="lg:col-span-6 grid grid-cols-2 gap-4">
             <div className="space-y-4">
