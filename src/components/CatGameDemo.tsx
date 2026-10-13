@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Heart, MousePointer2, Sparkles } from 'lucide-react';
 
-type Pose = 'idle' | 'petted' | 'playful';
+type Pose = 'idle' | 'blink' | 'petted' | 'playful' | 'swipe' | 'pounce';
 
 const POSE_IMAGES: Record<Pose, string> = {
   idle: '/game/mramorka-idle.png',
+  blink: '/game/mramorka-blink.png',
   petted: '/game/mramorka-petted.png',
   playful: '/game/mramorka-playful.png',
+  swipe: '/game/mramorka-swipe.png',
+  pounce: '/game/mramorka-pounce.png',
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -14,10 +17,13 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 export function CatGameDemo() {
   const stageRef = useRef<HTMLDivElement>(null);
   const resetTimerRef = useRef<number | null>(null);
+  const sequenceTimersRef = useRef<number[]>([]);
+  const lastPounceRef = useRef(0);
   const [pose, setPose] = useState<Pose>('idle');
   const [affection, setAffection] = useState(36);
   const [toyMode, setToyMode] = useState(false);
   const [toyPosition, setToyPosition] = useState({ x: 70, y: 28 });
+  const [catOffset, setCatOffset] = useState(0);
   const [message, setMessage] = useState('Мраморка присматривается к вам…');
   const [heartBurst, setHeartBurst] = useState(0);
 
@@ -25,9 +31,33 @@ export function CatGameDemo() {
     document.title = 'Поиграть с Мраморкой — Доброта для кота';
   }, []);
 
+  useEffect(() => {
+    if (toyMode) return;
+    let blinkEndTimer: number | null = null;
+    const blinkTimer = window.setInterval(() => {
+      setPose((current) => {
+        if (current !== 'idle') return current;
+        blinkEndTimer = window.setTimeout(() => {
+          setPose((latest) => latest === 'blink' ? 'idle' : latest);
+        }, 150);
+        return 'blink';
+      });
+    }, 4200);
+    return () => {
+      window.clearInterval(blinkTimer);
+      if (blinkEndTimer) window.clearTimeout(blinkEndTimer);
+    };
+  }, [toyMode]);
+
   useEffect(() => () => {
     if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current);
+    sequenceTimersRef.current.forEach((timer) => window.clearTimeout(timer));
   }, []);
+
+  const clearSequence = () => {
+    sequenceTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    sequenceTimersRef.current = [];
+  };
 
   const scheduleIdle = (delay = 1800) => {
     if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current);
@@ -40,7 +70,9 @@ export function CatGameDemo() {
   };
 
   const petMramorka = () => {
+    clearSequence();
     setToyMode(false);
+    setCatOffset(0);
     setPose('petted');
     setAffection((value) => clamp(value + 8, 0, 100));
     setMessage('М-р-р-р… Мраморке нравится!');
@@ -50,10 +82,12 @@ export function CatGameDemo() {
   };
 
   const toggleToy = () => {
+    clearSequence();
     if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current);
     setToyMode((enabled) => {
       const next = !enabled;
       setPose(next ? 'playful' : 'idle');
+      if (!next) setCatOffset(0);
       setMessage(next ? 'Водите бантиком по комнате — Мраморка следит за ним.' : 'Мраморка немного отдохнёт.');
       if (next) setAffection((value) => clamp(value + 3, 0, 100));
       return next;
@@ -61,10 +95,17 @@ export function CatGameDemo() {
   };
 
   const callMramorka = () => {
+    clearSequence();
     setToyMode(false);
-    setPose('idle');
+    setCatOffset(0);
+    setPose('blink');
     setAffection((value) => clamp(value + 2, 0, 100));
     setMessage('Мраморка услышала вас и внимательно смотрит.');
+    sequenceTimersRef.current = [
+      window.setTimeout(() => setPose('idle'), 150),
+      window.setTimeout(() => setPose('blink'), 520),
+      window.setTimeout(() => setPose('idle'), 690),
+    ];
     scheduleIdle(2100);
   };
 
@@ -73,8 +114,28 @@ export function CatGameDemo() {
     const bounds = stageRef.current.getBoundingClientRect();
     const x = clamp(((clientX - bounds.left) / bounds.width) * 100, 8, 92);
     const y = clamp(((clientY - bounds.top) / bounds.height) * 100, 10, 72);
+    const characterWidth = Math.min(bounds.width * 0.86, 620);
+    const maxOffset = Math.min(160, Math.max(0, (bounds.width - characterWidth) / 2 - 12));
     setToyPosition({ x, y });
-    setPose('playful');
+    setCatOffset(clamp(((x - 50) / 42) * maxOffset, -maxOffset, maxOffset));
+
+    const now = Date.now();
+    if (now - lastPounceRef.current > 1700) {
+      lastPounceRef.current = now;
+      clearSequence();
+      setPose('swipe');
+      setMessage('Мраморка тянется лапкой к бантику…');
+      sequenceTimersRef.current = [
+        window.setTimeout(() => setPose('pounce'), 190),
+        window.setTimeout(() => {
+          setPose('playful');
+          setAffection((value) => clamp(value + 2, 0, 100));
+          setMessage('Поймала почти! Попробуйте увести бантик в сторону.');
+        }, 720),
+      ];
+    } else {
+      setPose((current) => ['swipe', 'pounce'].includes(current) ? current : 'playful');
+    }
   };
 
   return (
@@ -82,10 +143,17 @@ export function CatGameDemo() {
       <style>{`
         @keyframes cat-breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-5px) scale(1.008); } }
         @keyframes cat-ready { 0%, 100% { transform: translate(-2px, 0) rotate(-0.4deg); } 50% { transform: translate(4px, -7px) rotate(0.6deg); } }
+        @keyframes cat-nuzzle { 0% { transform: translateY(5px) rotate(-1deg); } 45% { transform: translateY(-7px) rotate(1.5deg) scale(1.015); } 100% { transform: translateY(0) rotate(0); } }
+        @keyframes cat-swipe { 0% { transform: translateY(8px) rotate(-1deg) scale(.98); } 100% { transform: translateY(-7px) rotate(1deg) scale(1.025); } }
+        @keyframes cat-pounce { 0% { transform: translateY(10px) scale(.96); } 45% { transform: translateY(-24px) scale(1.04) rotate(-1.5deg); } 100% { transform: translateY(0) scale(1); } }
         @keyframes ribbon-sway { 0%, 100% { transform: rotate(-13deg); } 50% { transform: rotate(16deg); } }
         @keyframes heart-float { 0% { opacity: 0; transform: translateY(6px) scale(.45); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-92px) translateX(var(--heart-x)) scale(1.15); } }
         .cat-game-character { animation: cat-breathe 3.6s ease-in-out infinite; }
+        .cat-game-character[data-pose="blink"] { animation: cat-breathe 3.6s ease-in-out infinite; }
+        .cat-game-character[data-pose="petted"] { animation: cat-nuzzle 1.35s ease-in-out infinite alternate; }
         .cat-game-character[data-pose="playful"] { animation: cat-ready 1.15s ease-in-out infinite; }
+        .cat-game-character[data-pose="swipe"] { animation: cat-swipe .22s ease-out; }
+        .cat-game-character[data-pose="pounce"] { animation: cat-pounce .56s cubic-bezier(.2,.8,.3,1); }
         .cat-game-ribbon { animation: ribbon-sway .75s ease-in-out infinite; transform-origin: top center; }
         .cat-game-heart { animation: heart-float 1.55s ease-out forwards; }
         @media (prefers-reduced-motion: reduce) { .cat-game-character, .cat-game-ribbon, .cat-game-heart { animation: none; } }
@@ -146,17 +214,20 @@ export function CatGameDemo() {
           <button
             type="button"
             aria-label="Погладить Мраморку"
-            className="absolute bottom-[9%] left-1/2 z-20 w-[min(86%,620px)] -translate-x-1/2 cursor-pointer border-0 bg-transparent p-0 outline-none focus-visible:rounded-full focus-visible:ring-4 focus-visible:ring-amber-400/70"
-            onClick={petMramorka}
+            className="absolute bottom-[9%] left-1/2 z-20 w-[min(86%,620px)] cursor-pointer border-0 bg-transparent p-0 transition-transform duration-300 ease-out outline-none focus-visible:rounded-full focus-visible:ring-4 focus-visible:ring-amber-400/70"
+            style={{ transform: `translateX(calc(-50% + ${toyMode ? catOffset : 0}px))` }}
+            onClick={() => { if (!toyMode) petMramorka(); }}
           >
-            <img
-              key={pose}
-              src={POSE_IMAGES[pose]}
-              alt="Анимированная Мраморка"
-              draggable={false}
-              data-pose={pose}
-              className="cat-game-character mx-auto block max-h-[385px] w-full object-contain drop-shadow-[0_24px_18px_rgba(67,38,17,0.25)] transition-all duration-300 sm:max-h-[455px]"
-            />
+            <div className="transition-transform duration-300" style={{ transform: toyMode && toyPosition.x < 50 ? 'scaleX(-1)' : 'scaleX(1)' }}>
+              <img
+                key={pose}
+                src={POSE_IMAGES[pose]}
+                alt="Анимированная Мраморка"
+                draggable={false}
+                data-pose={pose}
+                className="cat-game-character mx-auto block max-h-[385px] w-full object-contain drop-shadow-[0_24px_18px_rgba(67,38,17,0.25)] sm:max-h-[455px]"
+              />
+            </div>
             {pose === 'petted' && (
               <span key={heartBurst} aria-hidden="true" className="absolute left-1/2 top-[24%]">
                 {[-42, -12, 24, 52].map((offset, index) => (
@@ -184,7 +255,7 @@ export function CatGameDemo() {
             </div>
           )}
 
-          <div className="absolute bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap justify-center gap-2 sm:bottom-6 sm:gap-3">
+          <div className="absolute bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap justify-center gap-2 sm:bottom-6 sm:gap-3" onPointerDown={(event) => event.stopPropagation()}>
             <button type="button" onClick={petMramorka} className="rounded-xl bg-white px-3 py-2.5 text-xs font-extrabold shadow-lg ring-1 ring-stone-200 transition hover:-translate-y-0.5 hover:bg-rose-50 sm:px-4 sm:py-3 sm:text-sm">
               🤍 Погладить
             </button>
