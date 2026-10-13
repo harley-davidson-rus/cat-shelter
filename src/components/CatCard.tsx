@@ -309,7 +309,7 @@ export const CatCard: React.FC<CatCardProps> = ({
       </div>
 
       {/* Action Buttons Footer */}
-      <div className="p-5 pt-0 grid grid-cols-2 gap-2">
+      <div className={`p-5 pt-0 grid ${isAvailable ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
         <a
           id={`view-profile-btn-${cat.id}`}
           href={detailHref}
@@ -324,17 +324,19 @@ export const CatCard: React.FC<CatCardProps> = ({
           <span>Анкета и медиа</span>
         </a>
 
-        <button
-          id={`apply-adopt-btn-${cat.id}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onApplyForAdoption(cat);
-          }}
-          className="py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1"
-        >
-          <span>Забрать</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        {isAvailable && (
+          <button
+            id={`apply-adopt-btn-${cat.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onApplyForAdoption(cat);
+            }}
+            className="py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1"
+          >
+            <span>Забрать</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </article>
   );

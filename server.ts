@@ -537,6 +537,15 @@ async function startServer() {
     try {
       const data = validate(objectSchema, req.body);
       if (typeof data.applicantName !== 'string' || typeof data.phone !== 'string') return res.status(400).json({ error: 'Applicant name and phone are required' });
+      const catId = typeof data.catId === 'string' ? data.catId : '';
+      const cat = (await getAllCats()).find((candidate) => candidate.id === catId);
+      if (!cat) return res.status(400).json({ error: 'Выберите котика из каталога' });
+      if (cat.status !== 'available') {
+        const message = cat.status === 'reserved'
+          ? 'Этот котик сейчас на бронировании. Приём заявок закрыт.'
+          : 'Этот котик уже дома. Приём заявок закрыт.';
+        return res.status(409).json({ error: message });
+      }
       res.status(201).json(await createApplication(req.visitorId as string, data as never));
     } catch (error) { next(error); }
   });

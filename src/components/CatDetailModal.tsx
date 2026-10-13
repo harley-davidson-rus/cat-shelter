@@ -447,7 +447,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
               </div>
 
               {/* Big CTA inside modal */}
-              <div className="pt-2">
+              {cat.status === 'available' && <div className="pt-2">
                 <button
                   id="modal-apply-btn"
                   onClick={() => {
@@ -459,7 +459,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                   <HeartHandshake className="w-5 h-5" />
                   <span>Подать заявку на усыновление {cat.name}</span>
                 </button>
-              </div>
+              </div>}
             </div>
           </div>
 
@@ -581,16 +581,18 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
             >
               Закрыть
             </button>
-            <button
-              id="footer-apply-cat-btn"
-              onClick={() => {
-                onClose();
-                onApplyForAdoption(cat);
-              }}
-              className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors"
-            >
-              Подать заявку
-            </button>
+            {cat.status === 'available' && (
+              <button
+                id="footer-apply-cat-btn"
+                onClick={() => {
+                  onClose();
+                  onApplyForAdoption(cat);
+                }}
+                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors"
+              >
+                Подать заявку
+              </button>
+            )}
           </div>
         </div>
       </div>

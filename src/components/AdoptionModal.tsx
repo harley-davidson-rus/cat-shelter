@@ -23,7 +23,9 @@ export const AdoptionModal: React.FC<AdoptionModalProps> = ({
   if (!isOpen) return null;
 
   // Selected cat state (defaults to passed cat or first available cat)
-  const [selectedCatId, setSelectedCatId] = useState<string>(cat?.id || allCats[0]?.id || '');
+  const [selectedCatId, setSelectedCatId] = useState<string>(
+    cat?.status === 'available' ? cat.id : allCats[0]?.id || '',
+  );
 
   // Form Fields
   const [applicantName, setApplicantName] = useState('');
@@ -45,7 +47,7 @@ export const AdoptionModal: React.FC<AdoptionModalProps> = ({
   const [submittedAppId, setSubmittedAppId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const currentCat = allCats.find((c) => c.id === selectedCatId) || cat;
+  const currentCat = allCats.find((c) => c.id === selectedCatId) || null;
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};

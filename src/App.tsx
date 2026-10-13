@@ -415,6 +415,14 @@ export default function App() {
 
   // Open adoption modal for specific cat
   const handleOpenAdoptionForCat = (cat: Cat) => {
+    if (cat.status !== 'available') {
+      showToast(
+        cat.status === 'reserved'
+          ? `${cat.name} сейчас на бронировании — подать заявку нельзя`
+          : `${cat.name} уже дома — приём заявок закрыт`,
+      );
+      return;
+    }
     setSelectedCatForAdoption(cat);
     setIsAdoptionModalOpen(true);
   };
@@ -724,6 +732,8 @@ export default function App() {
     : sortedArticles,
   [selectedArticleTag, sortedArticles]);
 
+  const adoptableCats = useMemo(() => cats.filter((cat) => cat.status === 'available'), [cats]);
+
   // Derived favorite cats
   const favoriteCats = useMemo(() => {
     return cats.filter((c) => favoriteIds.includes(c.id));
@@ -819,7 +829,7 @@ export default function App() {
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <button
               onClick={() => {
-                setSelectedCatForAdoption(cats[0] || null);
+                setSelectedCatForAdoption(adoptableCats[0] || null);
                 setIsAdoptionModalOpen(true);
               }}
               className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-bold shadow-xs transition-colors cursor-pointer"
@@ -894,7 +904,7 @@ export default function App() {
       {/* Rules & Process Section */}
       <AdoptionRulesSection
         onStartAdoptionClick={() => {
-          setSelectedCatForAdoption(cats[0] || null);
+          setSelectedCatForAdoption(adoptableCats[0] || null);
           setIsAdoptionModalOpen(true);
         }}
       />
@@ -960,7 +970,7 @@ export default function App() {
       {/* Adoption Application Submission Modal */}
       {isAdoptionModalOpen && <AdoptionModal
         cat={selectedCatForAdoption}
-        allCats={cats}
+        allCats={adoptableCats}
         isOpen={isAdoptionModalOpen}
         onClose={() => setIsAdoptionModalOpen(false)}
         onSubmitApplication={handleCreateApplication}
@@ -974,7 +984,7 @@ export default function App() {
         applications={myApplications}
         contacts={siteContacts}
         onOpenAdoptionModal={() => {
-          setSelectedCatForAdoption(cats[0] || null);
+          setSelectedCatForAdoption(adoptableCats[0] || null);
           setIsAdoptionModalOpen(true);
         }}
       />}

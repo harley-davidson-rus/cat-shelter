@@ -110,16 +110,18 @@ export const FavoritesModal: React.FC<FavoritesModalProps> = ({
                       <Trash2 className="w-4 h-4" />
                     </button>
 
-                    <button
-                      onClick={() => {
-                        onClose();
-                        onApplyForAdoption(cat);
-                      }}
-                      className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-amber-600 sm:flex-none"
-                    >
-                      <span>Подать заявку</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    {cat.status === 'available' && (
+                      <button
+                        onClick={() => {
+                          onClose();
+                          onApplyForAdoption(cat);
+                        }}
+                        className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-amber-600 sm:flex-none"
+                      >
+                        <span>Подать заявку</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
