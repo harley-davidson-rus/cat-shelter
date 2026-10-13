@@ -256,6 +256,31 @@ function renderSeoDocument(template: string, page: SeoPage): string {
     .replace('<div id="root"></div>', prerender + '<div id="root"></div>');
 }
 
+function renderHomeSeoDocument(template: string, cats: Cat[], articles: ShelterArticle[]): string {
+  const catLinks = cats.map((cat) =>
+    '<li><a href="' + escapeHtml(catSeoPath(cat, cats)) + '">' + escapeHtml(cat.name) + '</a></li>'
+  ).join('');
+  const articleLinks = articles.map((article) =>
+    '<li><a href="' + escapeHtml(articleSeoPath(article, articles)) + '">' + escapeHtml(article.title) + '</a></li>'
+  ).join('');
+  const prerender = [
+    '<main id="seo-prerender" style="max-width:72rem;margin:0 auto;padding:2rem 1rem;font-family:Arial,sans-serif;color:#292524">',
+    '<h1>Фонд помощи животным «Доброта для кота»</h1>',
+    '<p>Анкеты котиков, которые ищут ответственный и любящий дом, и новости фонда.</p>',
+    '<section><h2>Анкеты котиков</h2><ul>', catLinks, '</ul></section>',
+    '<section><h2>Новости и истории</h2><ul>', articleLinks, '</ul></section>',
+    '</main>',
+  ].join('');
+  return template.replace('<div id="root"></div>', prerender + '<div id="root"></div>');
+}
+
+function sitemapDate(...values: Array<string | undefined>): string {
+  const timestamps = values
+    .map((value) => value ? Date.parse(value) : Number.NaN)
+    .filter((value) => Number.isFinite(value));
+  return new Date(timestamps.length ? Math.max(...timestamps) : Date.now()).toISOString().slice(0, 10);
+}
+
 function catSeoPage(cat: Cat, cats: Cat[]): SeoPage {
   const canonical = PUBLIC_ORIGIN + catSeoPath(cat, cats);
   const description = plainText(cat.story || (cat.breed + ', ' + cat.age + '. Котик ищет ответственную семью в Санкт-Петербурге.'));
@@ -461,24 +486,52 @@ async function startServer() {
   app.get('/sitemap.xml', async (_req, res, next) => {
     try {
       const [cats, articles] = await Promise.all([getAllCats(), getAllArticles()]);
-      const lastModified = new Date().toISOString().slice(0, 10);
-      const urls = [
-        PUBLIC_ORIGIN + '/',
-        ...cats.map((cat) => PUBLIC_ORIGIN + catSeoPath(cat, cats)),
-        ...articles.map((article) => PUBLIC_ORIGIN + articleSeoPath(article, articles)),
-        ...collectArticleTags(articles)
-          .filter((tag) => tag.count >= 2)
-          .map((tag) => PUBLIC_ORIGIN + articleTagPath(tag.label)),
+      const tags = collectArticleTags(articles).filter((tag) => tag.count >= 2);
+      const entries = [
+        {
+          url: PUBLIC_ORIGIN + '/',
+          lastModified: sitemapDate(
+            ...cats.flatMap((cat) => [cat.updatedAt, cat.createdAt]),
+            ...articles.flatMap((article) => [article.updatedAt, article.createdAt]),
+          ),
+          changeFrequency: 'daily',
+          priority: '1.0',
+        },
+        ...cats.map((cat) => ({
+          url: PUBLIC_ORIGIN + catSeoPath(cat, cats),
+          lastModified: sitemapDate(cat.updatedAt, cat.createdAt),
+          changeFrequency: 'weekly',
+          priority: '0.8',
+        })),
+        ...articles.map((article) => ({
+          url: PUBLIC_ORIGIN + articleSeoPath(article, articles),
+          lastModified: sitemapDate(article.updatedAt, article.createdAt),
+          changeFrequency: 'weekly',
+          priority: '0.8',
+        })),
+        ...tags.map((tag) => {
+          const matchingArticles = articles.filter((article) =>
+            (article.tags || []).some((candidate) => articleTagSlug(candidate) === tag.slug)
+          );
+          return {
+            url: PUBLIC_ORIGIN + articleTagPath(tag.label),
+            lastModified: sitemapDate(
+              ...matchingArticles.flatMap((article) => [article.updatedAt, article.createdAt]),
+            ),
+            changeFrequency: 'weekly',
+            priority: '0.8',
+          };
+        }),
       ];
       const xml = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-        ...urls.map((url, index) => [
+        ...entries.map((entry) => [
           '  <url>',
-          '    <loc>' + escapeHtml(url) + '</loc>',
-          '    <lastmod>' + lastModified + '</lastmod>',
-          '    <changefreq>' + (index === 0 ? 'daily' : 'weekly') + '</changefreq>',
-          '    <priority>' + (index === 0 ? '1.0' : '0.8') + '</priority>',
+          '    <loc>' + escapeHtml(entry.url) + '</loc>',
+          '    <lastmod>' + entry.lastModified + '</lastmod>',
+          '    <changefreq>' + entry.changeFrequency + '</changefreq>',
+          '    <priority>' + entry.priority + '</priority>',
           '  </url>',
         ].join('\n')),
         '</urlset>',
@@ -732,6 +785,17 @@ async function startServer() {
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
     const indexTemplate = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
+    app.get('/', async (_req, res, next) => {
+      try {
+        const [cats, articles] = await Promise.all([getAllCats(), getAllArticles()]);
+        res
+          .set('Cache-Control', 'public, max-age=300')
+          .type('text/html')
+          .send(renderHomeSeoDocument(indexTemplate, cats, articles));
+      } catch (error) {
+        next(error);
+      }
+    });
     app.get('/news/tag/:tag', async (req, res, next) => {
       try {
         const articles = await getAllArticles();

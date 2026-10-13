@@ -6,7 +6,7 @@ import { getStoredMediaFileName } from './media';
 type DatabaseClient = Pool | PoolClient;
 
 type CatRow = QueryResultRow & {
-  id: string; created_at: Date; name: string; age: string; age_category: Cat['ageCategory']; gender: Cat['gender'];
+  id: string; created_at: Date; updated_at: Date; name: string; age: string; age_category: Cat['ageCategory']; gender: Cat['gender'];
   size: Cat['size']; weight_kg: number | null; temperament: Cat['temperament']; color: string; breed: string;
   primary_photo_x: number | null; primary_photo_y: number | null; story: string;
   habit_litter_box: string; habit_scratching_post: string; habit_food_preference: string;
@@ -17,7 +17,7 @@ type CatRow = QueryResultRow & {
 };
 
 type ArticleRow = QueryResultRow & {
-  id: string; created_at: Date; title: string; category: ShelterArticle['category']; summary: string; content: string;
+  id: string; created_at: Date; updated_at: Date; title: string; category: ShelterArticle['category']; summary: string; content: string;
   cover_position_x: number | null; cover_position_y: number | null; published_at: string;
   read_time_minutes: number; author: string; author_role: string | null; event_date: string | null;
   event_location: string | null; related_cat_id: string | null; likes_count: number;
@@ -287,7 +287,7 @@ export async function readCats(db: DatabaseClient): Promise<Cat[]> {
   const photos = await db.query('SELECT cat_id, position, url FROM cat_photos ORDER BY cat_id, position');
   const videos = await db.query('SELECT cat_id, video_id, position, url, title, duration, thumbnail_url, is_short FROM cat_videos ORDER BY cat_id, position');
   return result.rows.map((row) => ({
-    id: row.id, createdAt: row.created_at.toISOString(), name: row.name, age: row.age, ageCategory: row.age_category, gender: row.gender, size: row.size,
+    id: row.id, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(), name: row.name, age: row.age, ageCategory: row.age_category, gender: row.gender, size: row.size,
     weightKg: row.weight_kg ?? undefined, temperament: row.temperament, color: row.color, breed: row.breed,
     photos: photos.rows.filter((item) => item.cat_id === row.id).map((item) => item.url),
     primaryPhotoPosition: row.primary_photo_x === null || row.primary_photo_y === null ? undefined : { x: row.primary_photo_x, y: row.primary_photo_y },
@@ -355,7 +355,7 @@ export async function readArticles(db: DatabaseClient): Promise<ShelterArticle[]
   return result.rows.map((row) => {
     const articleImages = images.rows.filter((item) => item.article_id === row.id);
     return {
-      id: row.id, createdAt: row.created_at.toISOString(), title: row.title, category: row.category, summary: row.summary, content: row.content,
+      id: row.id, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(), title: row.title, category: row.category, summary: row.summary, content: row.content,
       coverImage: articleImages.find((item) => item.role === 'cover')?.url || '',
       coverPosition: row.cover_position_x === null || row.cover_position_y === null ? undefined : { x: row.cover_position_x, y: row.cover_position_y },
       galleryImages: articleImages.filter((item) => item.role === 'gallery').map((item) => item.url),
