@@ -671,12 +671,12 @@ export default function App() {
     return cats.filter((cat) => {
       // Search filter
       if (filters.search.trim()) {
-        const query = filters.search.toLowerCase();
-        const matchesName = cat.name.toLowerCase().includes(query);
-        const matchesBreed = cat.breed.toLowerCase().includes(query);
-        const matchesColor = cat.color.toLowerCase().includes(query);
-        const matchesTrait = cat.character.some((t) => t.toLowerCase().includes(query));
-        const matchesStory = cat.story.toLowerCase().includes(query);
+        const query = filters.search.trim().toLocaleLowerCase('ru');
+        const matchesName = cat.name.toLocaleLowerCase('ru').includes(query);
+        const matchesBreed = cat.breed.toLocaleLowerCase('ru').includes(query);
+        const matchesColor = cat.color.toLocaleLowerCase('ru').includes(query);
+        const matchesTrait = cat.character.some((t) => t.toLocaleLowerCase('ru').includes(query));
+        const matchesStory = cat.story.toLocaleLowerCase('ru').includes(query);
         if (!matchesName && !matchesBreed && !matchesColor && !matchesTrait && !matchesStory) {
           return false;
         }
@@ -870,6 +870,7 @@ export default function App() {
                 onViewDetails={openCatDetail}
                 onApplyForAdoption={(c) => handleOpenAdoptionForCat(c)}
                 detailHref={catSeoPath(cat, cats)}
+                searchQuery={filters.search}
               />
             ))}
           </div>

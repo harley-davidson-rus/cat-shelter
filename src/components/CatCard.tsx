@@ -11,6 +11,7 @@ interface CatCardProps {
   onApplyForAdoption: (cat: Cat) => void;
   onEditCat?: (cat: Cat) => void;
   detailHref?: string;
+  searchQuery?: string;
 }
 
 const SIZE_SHORT: Record<CatSize, string> = {
@@ -27,6 +28,51 @@ const TEMPERAMENT_SHORT: Record<CatTemperament, string> = {
   curious: 'Любопытный',
 };
 
+const normalizeSearch = (value: string): string => value.trim().toLocaleLowerCase('ru');
+
+const highlightMatches = (text: string, query: string): React.ReactNode => {
+  const normalizedQuery = normalizeSearch(query);
+  if (!normalizedQuery) return text;
+
+  const normalizedText = text.toLocaleLowerCase('ru');
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  let matchIndex = normalizedText.indexOf(normalizedQuery);
+
+  while (matchIndex >= 0) {
+    if (matchIndex > cursor) parts.push(text.slice(cursor, matchIndex));
+    parts.push(
+      <mark
+        key={matchIndex}
+        className="rounded-sm bg-amber-300 px-0.5 text-inherit"
+      >
+        {text.slice(matchIndex, matchIndex + normalizedQuery.length)}
+      </mark>,
+    );
+    cursor = matchIndex + normalizedQuery.length;
+    matchIndex = normalizedText.indexOf(normalizedQuery, cursor);
+  }
+
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts.length > 0 ? parts : text;
+};
+
+const matchingSnippet = (text: string, query: string): string => {
+  const normalizedQuery = normalizeSearch(query);
+  if (!normalizedQuery) return text;
+
+  const matchIndex = text.toLocaleLowerCase('ru').indexOf(normalizedQuery);
+  if (matchIndex < 0) return text;
+
+  const rawStart = Math.max(0, matchIndex - 55);
+  const rawEnd = Math.min(text.length, matchIndex + normalizedQuery.length + 90);
+  const wordStart = rawStart > 0 ? text.indexOf(' ', rawStart) : 0;
+  const wordEnd = rawEnd < text.length ? text.lastIndexOf(' ', rawEnd) : text.length;
+  const start = wordStart >= 0 && wordStart < matchIndex ? wordStart + 1 : rawStart;
+  const end = wordEnd > matchIndex ? wordEnd : rawEnd;
+  return (start > 0 ? '…' : '') + text.slice(start, end).trim() + (end < text.length ? '…' : '');
+};
+
 export const CatCard: React.FC<CatCardProps> = ({
   cat,
   isFavorite,
@@ -35,9 +81,19 @@ export const CatCard: React.FC<CatCardProps> = ({
   onApplyForAdoption,
   onEditCat,
   detailHref,
+  searchQuery = '',
 }) => {
   const isAvailable = cat.status === 'available';
   const hasVideos = cat.videos && cat.videos.length > 0;
+  const normalizedSearch = normalizeSearch(searchQuery);
+  const storyMatches = Boolean(normalizedSearch && cat.story.toLocaleLowerCase('ru').includes(normalizedSearch));
+  const storyText = storyMatches ? matchingSnippet(cat.story, searchQuery) : cat.story;
+  const visibleTraits = normalizedSearch
+    ? [
+        ...cat.character.filter((trait) => trait.toLocaleLowerCase('ru').includes(normalizedSearch)),
+        ...cat.character.filter((trait) => !trait.toLocaleLowerCase('ru').includes(normalizedSearch)),
+      ].slice(0, 3)
+    : cat.character.slice(0, 3);
 
   return (
     <article
@@ -171,7 +227,7 @@ export const CatCard: React.FC<CatCardProps> = ({
         <div className="p-5">
           <div className="flex items-start justify-between gap-2 mb-1.5">
             <h3 className="font-heading text-2xl font-extrabold text-stone-900 group-hover:text-amber-600 transition-colors">
-              {cat.name}
+              {highlightMatches(cat.name, searchQuery)}
             </h3>
             {cat.temperament && (
               <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-bold shrink-0">
@@ -182,14 +238,14 @@ export const CatCard: React.FC<CatCardProps> = ({
 
           {(cat.breed || cat.color) && (
             <p className="text-xs text-stone-500 font-medium mb-3 line-clamp-1">
-              {[cat.breed, cat.color].filter(Boolean).join(' • ')}
+              {highlightMatches([cat.breed, cat.color].filter(Boolean).join(' • '), searchQuery)}
             </p>
           )}
 
           {/* Short Story Snippet or note */}
           {cat.story ? (
-            <p className="text-xs text-stone-600 line-clamp-2 mb-4 leading-relaxed">
-              {cat.story}
+            <p className={`text-xs text-stone-600 line-clamp-2 mb-4 leading-relaxed ${storyMatches ? 'rounded-lg bg-amber-50 px-1.5 py-1' : ''}`}>
+              {highlightMatches(storyText, searchQuery)}
             </p>
           ) : (
             <p className="text-xs text-stone-400 italic mb-4">
@@ -200,12 +256,12 @@ export const CatCard: React.FC<CatCardProps> = ({
           {/* Character traits badges if present */}
           {cat.character && cat.character.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-4">
-              {cat.character.slice(0, 3).map((trait, idx) => (
+              {visibleTraits.map((trait, idx) => (
                 <span
                   key={idx}
                   className="px-2 py-0.5 rounded-lg bg-stone-100 text-stone-700 text-[11px] font-semibold"
                 >
-                  {trait}
+                  {highlightMatches(trait, searchQuery)}
                 </span>
               ))}
             </div>
