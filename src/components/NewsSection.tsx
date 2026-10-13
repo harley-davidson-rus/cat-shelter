@@ -42,7 +42,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({
     <section className="py-16 bg-stone-100/60 border-t border-stone-200/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div id="news" className="scroll-mt-20 min-[1180px]:scroll-mt-24 flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <div id="news" className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-bold mb-2">
               <Newspaper className="w-3.5 h-3.5 text-amber-600" />
