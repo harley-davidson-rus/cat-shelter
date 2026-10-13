@@ -927,6 +927,7 @@ export default function App() {
         onClose={closeCatDetail}
         onToggleFavorite={handleToggleFavorite}
         onApplyForAdoption={(cat) => handleOpenAdoptionForCat(cat)}
+        shareUrl={'https://kind4cat.ru' + catSeoPath(selectedCatForDetail, cats)}
       />}
 
       {/* Add or Edit Real Cat Modal */}

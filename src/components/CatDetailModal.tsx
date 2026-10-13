@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIcon, Dog, Calendar, HeartHandshake, Video, Play, Image as ImageIcon, Upload, Edit3, Maximize2 } from 'lucide-react';
+import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIcon, Dog, Calendar, HeartHandshake, Video, Play, Image as ImageIcon, Upload, Edit3, Maximize2, Link2 } from 'lucide-react';
 import { Cat, CatSize, CatTemperament } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 
@@ -9,6 +9,7 @@ interface CatDetailModalProps {
   onClose: () => void;
   onToggleFavorite: (id: string) => void;
   onApplyForAdoption: (cat: Cat) => void;
+  shareUrl: string;
 }
 
 const SIZE_LABELS: Record<CatSize, string> = {
@@ -31,6 +32,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   onClose,
   onToggleFavorite,
   onApplyForAdoption,
+  shareUrl,
 }) => {
   if (!cat) return null;
 
@@ -39,6 +41,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
   const [activeVideoIdx, setActiveVideoIdx] = useState(0);
   const [isPhotoFullscreen, setIsPhotoFullscreen] = useState(false);
+  const [copyLinkStatus, setCopyLinkStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const photoTouchStart = useRef<{ x: number; y: number } | null>(null);
   const photoSwipeWidth = useRef(0);
   const photoSwipeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -54,6 +57,38 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   const photoSwipeTransition = isPhotoSwipeAnimating
     ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'
     : 'none';
+
+  const handleCopyLink = async () => {
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        copied = true;
+      }
+    } catch {
+      // Fall back to the hidden text field below.
+    }
+
+    if (!copied) {
+      const textArea = document.createElement('textarea');
+      try {
+        textArea.value = shareUrl;
+        textArea.setAttribute('readonly', '');
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        copied = document.execCommand('copy');
+      } catch {
+        copied = false;
+      } finally {
+        textArea.remove();
+      }
+    }
+
+    setCopyLinkStatus(copied ? 'copied' : 'error');
+    window.setTimeout(() => setCopyLinkStatus('idle'), 2500);
+  };
 
   const centerPhotoThumbnail = (container: HTMLDivElement | null, photoIndex: number) => {
     const selector = '[data-photo-index="' + photoIndex + '"]';
@@ -169,6 +204,28 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
             </h2>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className={`flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-bold transition-colors ${
+                copyLinkStatus === 'copied'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : copyLinkStatus === 'error'
+                    ? 'bg-rose-100 text-rose-700'
+                    : 'text-stone-600 hover:bg-stone-200'
+              }`}
+              title={copyLinkStatus === 'copied' ? 'Ссылка скопирована' : 'Скопировать ссылку на анкету'}
+              aria-label={copyLinkStatus === 'copied' ? 'Ссылка скопирована' : 'Скопировать ссылку на анкету'}
+            >
+              {copyLinkStatus === 'copied' ? <Check className="w-5 h-5" /> : <Link2 className="w-5 h-5" />}
+              <span className="hidden sm:inline">
+                {copyLinkStatus === 'copied'
+                  ? 'Ссылка скопирована'
+                  : copyLinkStatus === 'error'
+                    ? 'Не удалось скопировать'
+                    : 'Скопировать ссылку'}
+              </span>
+            </button>
             <button
               onClick={() => onToggleFavorite(cat.id)}
               className="p-2 rounded-full hover:bg-stone-200 text-stone-600 transition-colors"
