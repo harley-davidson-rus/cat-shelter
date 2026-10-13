@@ -206,7 +206,7 @@ export default function App() {
     if (updateHistory && window.location.pathname !== targetPath) {
       window.history.pushState({ shelterTag: true }, '', targetPath);
     }
-    window.setTimeout(() => document.getElementById('news')?.scrollIntoView({ behavior: 'smooth' }), 0);
+    window.setTimeout(() => document.getElementById('news')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
   };
 
   const clearArticleTag = () => {
@@ -744,7 +744,7 @@ export default function App() {
   const scrollToCats = () => {
     const el = document.getElementById('cats');
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
@@ -800,9 +800,9 @@ export default function App() {
       />
 
       {/* Main Cats Catalog Section */}
-      <main id="cats" className="py-12 sm:py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1">
+      <main className="py-12 sm:py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1">
         {/* Section Heading */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <div id="cats" className="scroll-mt-20 min-[1180px]:scroll-mt-24 flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-bold mb-2">
               <Sparkles className="w-3.5 h-3.5 text-amber-600" />
