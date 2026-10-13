@@ -274,6 +274,21 @@ function renderHomeSeoDocument(template: string, cats: Cat[], articles: ShelterA
   return template.replace('<div id="root"></div>', prerender + '<div id="root"></div>');
 }
 
+function renderCatGameDemoDocument(template: string): string {
+  const title = 'Поиграть с Мраморкой — Доброта для кота';
+  const description = 'Экспериментальная игровая комната ласковой кошечки Мраморки.';
+  return template
+    .replace(/<title>[\s\S]*?<\/title>/i, '<title>' + title + '</title>')
+    .replace(/<meta name="description"[^>]*>/i, '<meta name="description" content="' + description + '" />')
+    .replace(/<meta name="robots"[^>]*>/i, '<meta name="robots" content="noindex, nofollow" />')
+    .replace(/<meta name="googlebot"[^>]*>/i, '<meta name="googlebot" content="noindex, nofollow" />')
+    .replace(/<meta name="yandex"[^>]*>/i, '<meta name="yandex" content="noindex, nofollow" />')
+    .replace(/<link rel="canonical"[^>]*>/i, '<link rel="canonical" href="' + PUBLIC_ORIGIN + '/cat-game-demo" />')
+    .replace(/<meta property="og:title"[^>]*>/i, '<meta property="og:title" content="' + title + '" />')
+    .replace(/<meta property="og:description"[^>]*>/i, '<meta property="og:description" content="' + description + '" />')
+    .replace(/<meta property="og:url"[^>]*>/i, '<meta property="og:url" content="' + PUBLIC_ORIGIN + '/cat-game-demo" />');
+}
+
 function sitemapDate(...values: Array<string | undefined>): string {
   const timestamps = values
     .map((value) => value ? Date.parse(value) : Number.NaN)
@@ -795,6 +810,12 @@ async function startServer() {
       } catch (error) {
         next(error);
       }
+    });
+    app.get('/cat-game-demo', (_req, res) => {
+      res
+        .set('Cache-Control', 'no-cache')
+        .type('text/html')
+        .send(renderCatGameDemoDocument(indexTemplate));
     });
     app.get('/news/tag/:tag', async (req, res, next) => {
       try {
