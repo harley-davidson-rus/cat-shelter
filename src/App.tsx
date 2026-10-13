@@ -793,8 +793,6 @@ export default function App() {
       <HeroSection
         onExploreClick={scrollToCats}
         onHowToAdoptClick={scrollToRules}
-        searchQuery={filters.search}
-        onSearchChange={(q) => setFilters((prev) => ({ ...prev, search: q }))}
         heroCat={dailyHeroCat}
         onHeroCatClick={openCatDetail}
         isLoading={!catsLoaded}
@@ -842,7 +840,7 @@ export default function App() {
 
         {/* Cats Grid or Empty State */}
         {filteredCats.length === 0 ? (
-          <div className="text-center py-16 px-4 bg-white rounded-3xl border border-stone-200">
+          <div id="cats-results" className="scroll-mt-4 text-center py-16 px-4 bg-white rounded-3xl border border-stone-200">
             <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3">
               <Search className="w-8 h-8" />
             </div>
@@ -862,7 +860,7 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+          <div id="cats-results" className="scroll-mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {filteredCats.map((cat) => (
               <CatCard
                 key={cat.id}

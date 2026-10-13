@@ -1,5 +1,5 @@
 import React from 'react';
-import { Filter, X, Sparkles, Check, Baby, Dog, Users, Smile, Heart, Zap, Coffee, Compass } from 'lucide-react';
+import { Filter, X, Sparkles, Check, Baby, Dog, Users, Smile, Heart, Zap, Coffee, Compass, Search } from 'lucide-react';
 import { FilterOptions, AgeCategory, CatGender, CatSize, CatTemperament } from '../types';
 
 interface CatFilterProps {
@@ -246,6 +246,36 @@ export const CatFilter: React.FC<CatFilterProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Search sits directly above the results, so changes are visible immediately. */}
+      <form
+        className="pt-4 border-t border-stone-100"
+        onSubmit={(event) => {
+          event.preventDefault();
+          document.getElementById('cats-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }}
+      >
+        <label htmlFor="catalog-search-input" className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-2">
+          Поиск по анкетам
+        </label>
+        <div className="relative flex items-center shadow-sm rounded-2xl bg-white border border-stone-200 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-200 transition-all p-1.5">
+          <Search className="w-5 h-5 text-stone-400 ml-3 shrink-0" aria-hidden="true" />
+          <input
+            id="catalog-search-input"
+            type="search"
+            value={filters.search}
+            onChange={(event) => onFilterChange({ ...filters, search: event.target.value })}
+            placeholder="Поиск по имени, породе или окрасу (например: Барсик, рыжий)..."
+            className="w-full min-w-0 px-3 py-2.5 text-stone-800 placeholder-stone-400 bg-transparent text-sm focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="px-4 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-sm font-medium transition-colors shrink-0 cursor-pointer"
+          >
+            Найти
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

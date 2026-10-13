@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Search, ShieldCheck, Sparkles, Home, ArrowDown, Cat as CatIcon } from 'lucide-react';
+import { Heart, ShieldCheck, Sparkles, Home, ArrowDown, Cat as CatIcon } from 'lucide-react';
 import { Cat, ShelterStats } from '../types';
 
 interface HeroSectionProps {
   onExploreClick: () => void;
   onHowToAdoptClick: () => void;
-  searchQuery: string;
-  onSearchChange: (q: string) => void;
   heroCat?: Cat;
   onHeroCatClick?: (cat: Cat) => void;
   isLoading?: boolean;
@@ -16,8 +14,6 @@ interface HeroSectionProps {
 export const HeroSection: React.FC<HeroSectionProps> = ({
   onExploreClick,
   onHowToAdoptClick,
-  searchQuery,
-  onSearchChange,
   heroCat,
   onHeroCatClick,
   isLoading = false,
@@ -64,7 +60,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          {/* Text & Search Column */}
+          {/* Text Column */}
           <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100/80 text-amber-900 border border-amber-200/80 text-xs sm:text-sm font-semibold">
               <Sparkles className="w-3.5 h-3.5 text-amber-600" />
@@ -82,27 +78,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             <p className="text-base sm:text-lg text-stone-600 max-w-2xl leading-relaxed">
               Фонд помощи животным <span className="whitespace-nowrap">«Доброта&nbsp;для&nbsp;кота»</span> лечит, социализирует и&nbsp;бережно передаёт котиков в&nbsp;заботливые руки после подписания согласия на ответственное содержание. Познакомьтесь с&nbsp;нашими подопечными онлайн и&nbsp;подайте заявку на&nbsp;усыновление прямо сейчас!
             </p>
-
-            {/* Fast Interactive Search Bar */}
-            <div className="pt-2 max-w-xl mx-auto lg:mx-0">
-              <div className="relative flex items-center shadow-md shadow-stone-200/60 rounded-2xl bg-white border border-stone-200 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-200 transition-all p-1.5">
-                <Search className="w-5 h-5 text-stone-400 ml-3 shrink-0" />
-                <input
-                  id="hero-search-input"
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => onSearchChange(e.target.value)}
-                  placeholder="Поиск по имени, породе или окрасу (например: Барсик, рыжий)..."
-                  className="w-full px-3 py-2.5 text-stone-800 placeholder-stone-400 bg-transparent text-sm focus:outline-none"
-                />
-                <button
-                  onClick={onExploreClick}
-                  className="px-4 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-sm font-medium transition-colors shrink-0"
-                >
-                  Найти
-                </button>
-              </div>
-            </div>
 
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3 sm:gap-4 pt-2">
