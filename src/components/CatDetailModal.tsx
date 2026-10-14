@@ -316,6 +316,17 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
     video.muted = isFullscreenMuted;
   }, [activeMediaIndex, fullscreenVolume, isFullscreenMuted, isPhotoFullscreen]);
 
+  const applyFullscreenAudio = (volume: number, muted: boolean) => {
+    const normalizedVolume = Math.min(1, Math.max(0, volume));
+    const video = fullscreenVideoRef.current;
+    if (video) {
+      video.volume = normalizedVolume;
+      video.muted = muted;
+    }
+    setFullscreenVolume(normalizedVolume);
+    setIsFullscreenMuted(muted);
+  };
+
   const renderFullscreenMedia = (item: GalleryMediaItem, isCurrent: boolean) => {
     if (item.type === 'video') {
       return (
@@ -324,13 +335,10 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
           ref={isCurrent ? fullscreenVideoRef : undefined}
           src={item.url}
           controls={isCurrent}
+          muted={isCurrent ? isFullscreenMuted : true}
           autoPlay={isCurrent}
           preload="metadata"
           onEnded={isCurrent && nextMediaItem ? () => finishFullscreenSwipe('next') : undefined}
-          onVolumeChange={isCurrent ? (event) => {
-            setFullscreenVolume(event.currentTarget.volume);
-            setIsFullscreenMuted(event.currentTarget.muted);
-          } : undefined}
           className={`max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/10 ${isCurrent ? '' : 'pointer-events-none'}`}
         />
       );
@@ -859,15 +867,18 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
             <div
               className="absolute top-4 left-4 z-70 flex items-center gap-2 rounded-2xl border border-white/10 bg-stone-900/90 px-2.5 py-2 text-white shadow-lg backdrop-blur-md"
               onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+              onTouchStart={(event) => event.stopPropagation()}
+              onTouchMove={(event) => event.stopPropagation()}
+              onTouchEnd={(event) => event.stopPropagation()}
             >
               <button
                 type="button"
                 onClick={() => {
                   if (isFullscreenMuted || fullscreenVolume === 0) {
-                    if (fullscreenVolume === 0) setFullscreenVolume(0.5);
-                    setIsFullscreenMuted(false);
+                    applyFullscreenAudio(fullscreenVolume === 0 ? 0.5 : fullscreenVolume, false);
                   } else {
-                    setIsFullscreenMuted(true);
+                    applyFullscreenAudio(fullscreenVolume, true);
                   }
                 }}
                 className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
@@ -886,8 +897,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                 value={isFullscreenMuted ? 0 : fullscreenVolume}
                 onChange={(event) => {
                   const volume = Number(event.target.value);
-                  setFullscreenVolume(volume);
-                  setIsFullscreenMuted(volume === 0);
+                  applyFullscreenAudio(volume, volume === 0);
                 }}
                 className="w-24 sm:w-32 accent-amber-500 cursor-pointer"
                 aria-label="Громкость видео"
