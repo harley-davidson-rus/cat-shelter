@@ -415,6 +415,7 @@ export async function saveCat(data: Partial<Cat> & { id?: string }): Promise<Cat
     breed: data.breed || 'Метис',
     color: data.color || '',
     photos: data.photos?.length ? data.photos : [realCatPhoto],
+    primaryPhotoPosition: data.primaryPhotoPosition || { x: 50, y: 30 },
     videos: data.videos || [],
     character: data.character || [],
     story: data.story || '',
