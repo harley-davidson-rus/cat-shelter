@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIcon, Dog, Calendar, HeartHandshake, Video, Play, Image as ImageIcon, Upload, Edit3, Maximize2, Link2, ChevronLeft, ChevronRight, Volume2, VolumeX } from 'lucide-react';
+import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIcon, Dog, Calendar, HeartHandshake, Video, Play, Image as ImageIcon, Upload, Edit3, Maximize2, Link2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Cat, CatSize, CatTemperament } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 
@@ -56,11 +56,9 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   const fullscreenTouchStart = useRef<{ x: number; y: number } | null>(null);
   const fullscreenSwipeWidth = useRef(0);
   const fullscreenSwipeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fullscreenVideoRef = useRef<HTMLVideoElement | null>(null);
+  const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
   const [fullscreenSwipeOffset, setFullscreenSwipeOffset] = useState(0);
   const [isFullscreenSwipeAnimating, setIsFullscreenSwipeAnimating] = useState(false);
-  const [fullscreenVolume, setFullscreenVolume] = useState(1);
-  const [isFullscreenMuted, setIsFullscreenMuted] = useState(false);
 
   const currentVideo = cat.videos?.[activeVideoIdx];
   const currentPhoto = cat.photos[activePhotoIdx] || cat.photos[0] || realCatPhoto;
@@ -310,32 +308,17 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   }, [isPhotoFullscreen, activeMediaIndex, isFullscreenSwipeAnimating]);
 
   useEffect(() => {
-    const video = fullscreenVideoRef.current;
-    if (!video) return;
-    video.volume = fullscreenVolume;
-    video.muted = isFullscreenMuted;
-  }, [activeMediaIndex, fullscreenVolume, isFullscreenMuted, isPhotoFullscreen]);
-
-  const applyFullscreenAudio = (volume: number, muted: boolean) => {
-    const normalizedVolume = Math.min(1, Math.max(0, volume));
-    const video = fullscreenVideoRef.current;
-    if (video) {
-      video.volume = normalizedVolume;
-      video.muted = muted;
-    }
-    setFullscreenVolume(normalizedVolume);
-    setIsFullscreenMuted(muted);
-  };
+    if (isPhotoFullscreen) inlineVideoRef.current?.pause();
+  }, [isPhotoFullscreen]);
 
   const renderFullscreenMedia = (item: GalleryMediaItem, isCurrent: boolean) => {
     if (item.type === 'video') {
       return (
         <video
           key={item.url}
-          ref={isCurrent ? fullscreenVideoRef : undefined}
           src={item.url}
           controls={isCurrent}
-          muted={isCurrent ? isFullscreenMuted : true}
+          muted={!isCurrent}
           autoPlay={isCurrent}
           preload="metadata"
           onEnded={isCurrent && nextMediaItem ? () => finishFullscreenSwipe('next') : undefined}
@@ -431,6 +414,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                   <>
                     <video
                       key={currentVideo.url}
+                      ref={inlineVideoRef}
                       src={currentVideo.url}
                       controls
                       autoPlay
@@ -862,51 +846,6 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
               <X className="w-6 h-6" />
             </button>
           </div>
-
-          {currentMediaItem?.type === 'video' && (
-            <div
-              className="absolute top-4 left-4 z-70 flex items-center gap-2 rounded-2xl border border-white/10 bg-stone-900/90 px-2.5 py-2 text-white shadow-lg backdrop-blur-md"
-              onClick={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-              onTouchStart={(event) => event.stopPropagation()}
-              onTouchMove={(event) => event.stopPropagation()}
-              onTouchEnd={(event) => event.stopPropagation()}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (isFullscreenMuted || fullscreenVolume === 0) {
-                    applyFullscreenAudio(fullscreenVolume === 0 ? 0.5 : fullscreenVolume, false);
-                  } else {
-                    applyFullscreenAudio(fullscreenVolume, true);
-                  }
-                }}
-                className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
-                aria-label={isFullscreenMuted || fullscreenVolume === 0 ? 'Включить звук' : 'Выключить звук'}
-                title={isFullscreenMuted || fullscreenVolume === 0 ? 'Включить звук' : 'Выключить звук'}
-              >
-                {isFullscreenMuted || fullscreenVolume === 0
-                  ? <VolumeX className="h-5 w-5" />
-                  : <Volume2 className="h-5 w-5" />}
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={isFullscreenMuted ? 0 : fullscreenVolume}
-                onChange={(event) => {
-                  const volume = Number(event.target.value);
-                  applyFullscreenAudio(volume, volume === 0);
-                }}
-                className="w-24 sm:w-32 accent-amber-500 cursor-pointer"
-                aria-label="Громкость видео"
-              />
-              <span className="hidden sm:inline w-9 text-right text-xs font-semibold text-white/75">
-                {Math.round((isFullscreenMuted ? 0 : fullscreenVolume) * 100)}%
-              </span>
-            </div>
-          )}
 
           {/* Animated fullscreen media swipe track */}
           <div
