@@ -56,7 +56,6 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   const fullscreenTouchStart = useRef<{ x: number; y: number } | null>(null);
   const fullscreenSwipeWidth = useRef(0);
   const fullscreenSwipeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inlineVideoRef = useRef<HTMLVideoElement | null>(null);
   const [fullscreenSwipeOffset, setFullscreenSwipeOffset] = useState(0);
   const [isFullscreenSwipeAnimating, setIsFullscreenSwipeAnimating] = useState(false);
 
@@ -307,10 +306,6 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPhotoFullscreen, activeMediaIndex, isFullscreenSwipeAnimating]);
 
-  useEffect(() => {
-    if (isPhotoFullscreen) inlineVideoRef.current?.pause();
-  }, [isPhotoFullscreen]);
-
   const renderFullscreenMedia = (item: GalleryMediaItem, isCurrent: boolean) => {
     if (item.type === 'video') {
       return (
@@ -411,10 +406,10 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                 onTouchCancel={() => finishPhotoSwipe(null)}
               >
                 {activeMediaType === 'video' && currentVideo ? (
-                  <>
+                  !isPhotoFullscreen && (
+                    <>
                     <video
                       key={currentVideo.url}
-                      ref={inlineVideoRef}
                       src={currentVideo.url}
                       controls
                       autoPlay
@@ -428,7 +423,8 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                     >
                       <Maximize2 className="w-4 h-4" />
                     </button>
-                  </>
+                    </>
+                  )
                 ) : (
                   <>
                     {/* Atmospheric soft background matching photo colors */}
