@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIcon, Dog, Calendar, HeartHandshake, Video, Play, Image as ImageIcon, Upload, Edit3, Maximize2, Link2 } from 'lucide-react';
+import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIcon, Dog, Calendar, HeartHandshake, Video, Play, Image as ImageIcon, Upload, Edit3, Maximize2, Link2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Cat, CatSize, CatTemperament } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 
@@ -26,6 +26,10 @@ const TEMPERAMENT_LABELS: Record<CatTemperament, { label: string; desc: string }
   curious: { label: 'Любознательный исследователь', desc: 'Интересуется всем вокруг и учится новым трюкам' },
 };
 
+type GalleryMediaItem =
+  | { type: 'photo'; index: number; url: string }
+  | { type: 'video'; index: number; url: string; thumbnail?: string; title: string };
+
 export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   cat,
   isFavorite,
@@ -49,12 +53,37 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   const lightboxThumbnailsRef = useRef<HTMLDivElement | null>(null);
   const [photoSwipeOffset, setPhotoSwipeOffset] = useState(0);
   const [isPhotoSwipeAnimating, setIsPhotoSwipeAnimating] = useState(false);
+  const fullscreenTouchStart = useRef<{ x: number; y: number } | null>(null);
+  const fullscreenSwipeWidth = useRef(0);
+  const fullscreenSwipeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [fullscreenSwipeOffset, setFullscreenSwipeOffset] = useState(0);
+  const [isFullscreenSwipeAnimating, setIsFullscreenSwipeAnimating] = useState(false);
 
   const currentVideo = cat.videos?.[activeVideoIdx];
   const currentPhoto = cat.photos[activePhotoIdx] || cat.photos[0] || realCatPhoto;
   const previousPhoto = activePhotoIdx > 0 ? cat.photos[activePhotoIdx - 1] : null;
   const nextPhoto = activePhotoIdx < cat.photos.length - 1 ? cat.photos[activePhotoIdx + 1] : null;
   const photoSwipeTransition = isPhotoSwipeAnimating
+    ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'
+    : 'none';
+  const galleryPhotos = cat.photos.length > 0 ? cat.photos : [realCatPhoto];
+  const mediaItems: GalleryMediaItem[] = [
+    ...galleryPhotos.map((url, index) => ({ type: 'photo' as const, index, url })),
+    ...(cat.videos || []).map((video, index) => ({
+      type: 'video' as const,
+      index,
+      url: video.url,
+      thumbnail: video.thumbnail,
+      title: video.title,
+    })),
+  ];
+  const activeMediaIndex = activeMediaType === 'photo'
+    ? Math.min(activePhotoIdx, galleryPhotos.length - 1)
+    : galleryPhotos.length + Math.min(activeVideoIdx, Math.max((cat.videos?.length || 1) - 1, 0));
+  const currentMediaItem = mediaItems[activeMediaIndex] || mediaItems[0];
+  const previousMediaItem = activeMediaIndex > 0 ? mediaItems[activeMediaIndex - 1] : null;
+  const nextMediaItem = activeMediaIndex < mediaItems.length - 1 ? mediaItems[activeMediaIndex + 1] : null;
+  const fullscreenSwipeTransition = isFullscreenSwipeAnimating
     ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'
     : 'none';
 
@@ -90,8 +119,20 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
     window.setTimeout(() => setCopyLinkStatus('idle'), 2500);
   };
 
-  const centerPhotoThumbnail = (container: HTMLDivElement | null, photoIndex: number) => {
-    const selector = '[data-photo-index="' + photoIndex + '"]';
+  const selectMediaItem = (mediaIndex: number) => {
+    const item = mediaItems[mediaIndex];
+    if (!item) return;
+    if (item.type === 'photo') {
+      setActiveMediaType('photo');
+      setActivePhotoIdx(item.index);
+    } else {
+      setActiveMediaType('video');
+      setActiveVideoIdx(item.index);
+    }
+  };
+
+  const centerMediaThumbnail = (container: HTMLDivElement | null, mediaIndex: number) => {
+    const selector = '[data-media-index="' + mediaIndex + '"]';
     const thumbnail = container?.querySelector<HTMLElement>(selector);
     if (!container || !thumbnail) return;
     container.scrollTo({
@@ -100,15 +141,15 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
     });
   };
 
-  const scrollThumbnailStripsTo = (photoIndex: number) => {
-    centerPhotoThumbnail(photoThumbnailsRef.current, photoIndex);
-    centerPhotoThumbnail(lightboxThumbnailsRef.current, photoIndex);
+  const scrollThumbnailStripsTo = (mediaIndex: number) => {
+    centerMediaThumbnail(photoThumbnailsRef.current, mediaIndex);
+    centerMediaThumbnail(lightboxThumbnailsRef.current, mediaIndex);
   };
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => scrollThumbnailStripsTo(activePhotoIdx));
+    const frame = requestAnimationFrame(() => scrollThumbnailStripsTo(activeMediaIndex));
     return () => cancelAnimationFrame(frame);
-  }, [activePhotoIdx, isPhotoFullscreen]);
+  }, [activeMediaIndex, isPhotoFullscreen]);
 
   const resetPhotoTouch = () => {
     photoTouchStart.current = null;
@@ -186,6 +227,108 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
       finishPhotoSwipe(null);
     }
   };
+
+  const finishFullscreenSwipe = (direction: 'previous' | 'next' | null) => {
+    fullscreenTouchStart.current = null;
+    setIsFullscreenSwipeAnimating(true);
+
+    if (!direction) {
+      setFullscreenSwipeOffset(0);
+      fullscreenSwipeTimer.current = setTimeout(() => setIsFullscreenSwipeAnimating(false), 220);
+      return;
+    }
+
+    const targetIndex = direction === 'next'
+      ? Math.min(activeMediaIndex + 1, mediaItems.length - 1)
+      : Math.max(activeMediaIndex - 1, 0);
+    const distance = fullscreenSwipeWidth.current || window.innerWidth;
+    setFullscreenSwipeOffset(direction === 'next' ? -distance : distance);
+    fullscreenSwipeTimer.current = setTimeout(() => {
+      selectMediaItem(targetIndex);
+      setFullscreenSwipeOffset(0);
+      setIsFullscreenSwipeAnimating(false);
+    }, 220);
+  };
+
+  const handleFullscreenTouchStart = (event: React.TouchEvent) => {
+    if (isFullscreenSwipeAnimating) return;
+    if (fullscreenSwipeTimer.current) clearTimeout(fullscreenSwipeTimer.current);
+    const touch = event.touches[0];
+    fullscreenTouchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    fullscreenSwipeWidth.current = event.currentTarget.getBoundingClientRect().width;
+    setFullscreenSwipeOffset(0);
+  };
+
+  const handleFullscreenTouchMove = (event: React.TouchEvent) => {
+    const start = fullscreenTouchStart.current;
+    const touch = event.touches[0];
+    if (!start || !touch || isFullscreenSwipeAnimating || mediaItems.length < 2) return;
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    const atEdge =
+      (deltaX > 0 && activeMediaIndex === 0) ||
+      (deltaX < 0 && activeMediaIndex === mediaItems.length - 1);
+    setFullscreenSwipeOffset(atEdge ? deltaX * 0.22 : deltaX);
+  };
+
+  const handleFullscreenTouchEnd = (event: React.TouchEvent) => {
+    const start = fullscreenTouchStart.current;
+    const touch = event.changedTouches[0];
+    if (!start || !touch || mediaItems.length < 2) {
+      finishFullscreenSwipe(null);
+      return;
+    }
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    const isHorizontalSwipe = Math.abs(deltaX) >= 48 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+    if (isHorizontalSwipe && deltaX < 0 && nextMediaItem) {
+      finishFullscreenSwipe('next');
+    } else if (isHorizontalSwipe && deltaX > 0 && previousMediaItem) {
+      finishFullscreenSwipe('previous');
+    } else {
+      finishFullscreenSwipe(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!isPhotoFullscreen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsPhotoFullscreen(false);
+      if (event.key === 'ArrowLeft' && previousMediaItem && !isFullscreenSwipeAnimating) {
+        finishFullscreenSwipe('previous');
+      }
+      if (event.key === 'ArrowRight' && nextMediaItem && !isFullscreenSwipeAnimating) {
+        finishFullscreenSwipe('next');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPhotoFullscreen, activeMediaIndex, isFullscreenSwipeAnimating]);
+
+  const renderFullscreenMedia = (item: GalleryMediaItem, isCurrent: boolean) => {
+    if (item.type === 'video') {
+      return (
+        <video
+          key={item.url}
+          src={item.url}
+          controls={isCurrent}
+          autoPlay={isCurrent}
+          preload="metadata"
+          onEnded={isCurrent && nextMediaItem ? () => finishFullscreenSwipe('next') : undefined}
+          className={`max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/10 ${isCurrent ? '' : 'pointer-events-none'}`}
+        />
+      );
+    }
+    return (
+      <img
+        src={item.url || realCatPhoto}
+        alt={isCurrent ? cat.name : ''}
+        draggable={false}
+        className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/10"
+      />
+    );
+  };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200" onClick={onClose}>
       <div
@@ -262,13 +405,23 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                 onTouchCancel={() => finishPhotoSwipe(null)}
               >
                 {activeMediaType === 'video' && currentVideo ? (
-                  <video
-                    key={currentVideo.url}
-                    src={currentVideo.url}
-                    controls
-                    autoPlay
-                    className="w-full h-full object-contain bg-black relative z-10"
-                  />
+                  <>
+                    <video
+                      key={currentVideo.url}
+                      src={currentVideo.url}
+                      controls
+                      autoPlay
+                      className="w-full h-full object-contain bg-black relative z-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsPhotoFullscreen(true)}
+                      className="absolute top-3 right-3 z-20 p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white/90 hover:text-white backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-md"
+                      title="Открыть общую медиагалерею"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
+                  </>
                 ) : (
                   <>
                     {/* Atmospheric soft background matching photo colors */}
@@ -368,7 +521,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                 {cat.photos.map((photoUrl, idx) => (
                   <button
                     key={`p-${idx}`}
-                    data-photo-index={idx}
+                    data-media-index={idx}
                     onClick={() => {
                       setActiveMediaType('photo');
                       setActivePhotoIdx(idx);
@@ -397,6 +550,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                 {cat.videos?.map((vid, vIdx) => (
                   <button
                     key={vid.id || `v-${vIdx}`}
+                    data-media-index={galleryPhotos.length + vIdx}
                     onClick={() => {
                       setActiveMediaType('video');
                       setActiveVideoIdx(vIdx);
@@ -662,7 +816,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
         </div>
       </div>
 
-      {/* Lightbox: Uncropped Fullscreen Photo Viewer */}
+      {/* Lightbox: unified fullscreen photo and video viewer */}
       {isPhotoFullscreen && (
         <div
           className="fixed inset-0 z-60 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200"
@@ -674,7 +828,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
           {/* Lightbox Controls */}
           <div className="absolute top-4 right-4 z-70 flex items-center gap-3">
             <span className="text-white/70 text-xs font-medium bg-white/10 px-3 py-1 rounded-full">
-              {activePhotoIdx + 1} из {cat.photos.length}
+              {activeMediaIndex + 1} из {mediaItems.length}
             </span>
             <button
               type="button"
@@ -686,76 +840,102 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
             </button>
           </div>
 
-          {/* Animated fullscreen swipe track */}
+          {/* Animated fullscreen media swipe track */}
           <div
             className="relative w-full h-[86vh] overflow-hidden touch-pan-y select-none"
             onClick={(e) => e.stopPropagation()}
-            onTouchStart={handlePhotoTouchStart}
-            onTouchMove={handlePhotoTouchMove}
-            onTouchEnd={handlePhotoTouchEnd}
-            onTouchCancel={() => finishPhotoSwipe(null)}
+            onTouchStart={handleFullscreenTouchStart}
+            onTouchMove={handleFullscreenTouchMove}
+            onTouchEnd={handleFullscreenTouchEnd}
+            onTouchCancel={() => finishFullscreenSwipe(null)}
           >
-            {previousPhoto && (
+            {previousMediaItem && (
               <div
                 className="absolute inset-0 flex items-center justify-center pointer-events-none"
                 style={{
-                  transform: 'translate3d(calc(-100% + ' + photoSwipeOffset + 'px), 0, 0)',
-                  transition: photoSwipeTransition,
+                  transform: 'translate3d(calc(-100% + ' + fullscreenSwipeOffset + 'px), 0, 0)',
+                  transition: fullscreenSwipeTransition,
                 }}
               >
-                <img src={previousPhoto} alt="" draggable={false} className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/10" />
+                {renderFullscreenMedia(previousMediaItem, false)}
               </div>
             )}
             <div
               className="absolute inset-0 flex items-center justify-center"
               style={{
-                transform: 'translate3d(' + photoSwipeOffset + 'px, 0, 0)',
-                transition: photoSwipeTransition,
+                transform: 'translate3d(' + fullscreenSwipeOffset + 'px, 0, 0)',
+                transition: fullscreenSwipeTransition,
               }}
             >
-              <img
-                src={currentPhoto}
-                alt={cat.name}
-                draggable={false}
-                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/10"
-              />
+              {currentMediaItem && renderFullscreenMedia(currentMediaItem, true)}
             </div>
-            {nextPhoto && (
+            {nextMediaItem && (
               <div
                 className="absolute inset-0 flex items-center justify-center pointer-events-none"
                 style={{
-                  transform: 'translate3d(calc(100% + ' + photoSwipeOffset + 'px), 0, 0)',
-                  transition: photoSwipeTransition,
+                  transform: 'translate3d(calc(100% + ' + fullscreenSwipeOffset + 'px), 0, 0)',
+                  transition: fullscreenSwipeTransition,
                 }}
               >
-                <img src={nextPhoto} alt="" draggable={false} className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/10" />
+                {renderFullscreenMedia(nextMediaItem, false)}
               </div>
+            )}
+            {previousMediaItem && (
+              <button
+                type="button"
+                onClick={() => finishFullscreenSwipe('previous')}
+                className="hidden sm:flex absolute left-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 items-center justify-center rounded-full bg-black/55 hover:bg-black/75 text-white transition-colors"
+                aria-label="Предыдущий файл"
+              >
+                <ChevronLeft className="w-7 h-7" />
+              </button>
+            )}
+            {nextMediaItem && (
+              <button
+                type="button"
+                onClick={() => finishFullscreenSwipe('next')}
+                className="hidden sm:flex absolute right-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 items-center justify-center rounded-full bg-black/55 hover:bg-black/75 text-white transition-colors"
+                aria-label="Следующий файл"
+              >
+                <ChevronRight className="w-7 h-7" />
+              </button>
             )}
           </div>
           {/* Quick thumbnails navigation inside lightbox */}
-          {cat.photos.length > 1 && (
+          {mediaItems.length > 1 && (
             <div
               ref={lightboxThumbnailsRef}
               className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-stone-900/90 rounded-2xl border border-white/10 max-w-[90vw] overflow-x-auto scroll-smooth"
               onClick={(e) => e.stopPropagation()}
             >
-              {cat.photos.map((pUrl, pIdx) => (
+              {mediaItems.map((item, mediaIndex) => (
                 <button
-                  key={`lb-${pIdx}`}
-                  data-photo-index={pIdx}
+                  key={`lb-${item.type}-${item.index}`}
+                  data-media-index={mediaIndex}
                   type="button"
-                  onClick={() => setActivePhotoIdx(pIdx)}
-                  className={`w-12 h-12 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
-                    activePhotoIdx === pIdx
+                  onClick={() => selectMediaItem(mediaIndex)}
+                  className={`relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer bg-stone-900 ${
+                    activeMediaIndex === mediaIndex
                       ? 'border-amber-400 scale-105 shadow-md'
                       : 'border-transparent opacity-60 hover:opacity-100'
                   }`}
                 >
-                  <img
-                    src={pUrl || realCatPhoto}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
+                  {item.type === 'photo' ? (
+                    <img src={item.url || realCatPhoto} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <>
+                      {item.thumbnail ? (
+                        <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover opacity-60" />
+                      ) : (
+                        <div className="w-full h-full bg-stone-800" />
+                      )}
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <span className="w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md">
+                          <Play className="w-3 h-3 fill-white ml-0.5" />
+                        </span>
+                      </span>
+                    </>
+                  )}
                 </button>
               ))}
             </div>
