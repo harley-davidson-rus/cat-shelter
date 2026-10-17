@@ -2,6 +2,7 @@ import React from 'react';
 import { Heart, ShieldCheck, Check, Sparkles, ArrowRight, Baby, Cat as CatIcon, Dog, Video, Edit3 } from 'lucide-react';
 import { Cat, CatSize, CatTemperament } from '../types';
 import realCatPhoto from '../assets/defaultCat';
+import { sentenceCase } from '../utils/text';
 
 interface CatCardProps {
   cat: Cat;
@@ -272,7 +273,7 @@ export const CatCard: React.FC<CatCardProps> = ({
                   key={idx}
                   className="px-2 py-0.5 rounded-lg bg-stone-100 text-stone-700 text-[11px] font-semibold"
                 >
-                  {highlightMatches(trait, searchQuery)}
+                  {highlightMatches(sentenceCase(trait), searchQuery)}
                 </span>
               ))}
             </div>

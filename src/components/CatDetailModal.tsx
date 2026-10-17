@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIcon, Dog, Calendar, HeartHandshake, Video, Play, Image as ImageIcon, Upload, Edit3, Maximize2, Link2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Cat, CatSize, CatTemperament } from '../types';
 import realCatPhoto from '../assets/defaultCat';
+import { sentenceCase } from '../utils/text';
 
 interface CatDetailModalProps {
   cat: Cat | null;
@@ -660,7 +661,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                           key={idx}
                           className="px-2.5 py-1 rounded-xl bg-stone-100 text-stone-800 text-xs font-semibold"
                         >
-                          {trait}
+                          {sentenceCase(trait)}
                         </span>
                       ))}
                     </div>
