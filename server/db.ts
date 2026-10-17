@@ -241,34 +241,43 @@ function readLegacyDatabase(): Partial<ShelterDbSchema> & { settings?: Record<st
   try { return JSON.parse(fs.readFileSync(LEGACY_DB_FILE, 'utf8')); } catch { return {}; }
 }
 
-async function insertRows(table: 'cats' | 'articles', rows: Array<{ id: string }>): Promise<void> {
-  for (const row of rows) {
-    await pool.query('INSERT INTO ' + table + ' (id, data) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING', [row.id, row]);
-  }
-}
-
 async function externalizeDatabaseMedia(): Promise<void> {
-  const cats = await pool.query<{ id: string; data: Cat }>('SELECT id, data FROM cats');
-  for (const row of cats.rows) {
-    const updated = await storeCatMedia(sanitizeCat(row.data));
-    if (JSON.stringify(updated) !== JSON.stringify(row.data)) {
-      await pool.query('UPDATE cats SET data = $2 WHERE id = $1', [row.id, updated]);
+  const dataColumns = await pool.query<{ table_name: string }>(`
+    SELECT table_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND column_name = 'data'
+      AND table_name IN ('cats', 'articles', 'applications')
+  `);
+  const legacyTables = new Set(dataColumns.rows.map((row) => row.table_name));
+
+  if (legacyTables.has('cats')) {
+    const cats = await pool.query<{ id: string; data: Cat }>('SELECT id, data FROM cats');
+    for (const row of cats.rows) {
+      const updated = await storeCatMedia(sanitizeCat(row.data));
+      if (JSON.stringify(updated) !== JSON.stringify(row.data)) {
+        await pool.query('UPDATE cats SET data = $2 WHERE id = $1', [row.id, updated]);
+      }
     }
   }
 
-  const applications = await pool.query<{ id: string; data: AdoptionApplication }>('SELECT id, data FROM applications');
-  for (const row of applications.rows) {
-    const updated = await storeApplicationMedia(row.data);
-    if (JSON.stringify(updated) !== JSON.stringify(row.data)) {
-      await pool.query('UPDATE applications SET data = $2 WHERE id = $1', [row.id, updated]);
+  if (legacyTables.has('applications')) {
+    const applications = await pool.query<{ id: string; data: AdoptionApplication }>('SELECT id, data FROM applications');
+    for (const row of applications.rows) {
+      const updated = await storeApplicationMedia(row.data);
+      if (JSON.stringify(updated) !== JSON.stringify(row.data)) {
+        await pool.query('UPDATE applications SET data = $2 WHERE id = $1', [row.id, updated]);
+      }
     }
   }
 
-  const articles = await pool.query<{ id: string; data: ShelterArticle }>('SELECT id, data FROM articles');
-  for (const row of articles.rows) {
-    const updated = await storeArticleMedia(row.data);
-    if (JSON.stringify(updated) !== JSON.stringify(row.data)) {
-      await pool.query('UPDATE articles SET data = $2 WHERE id = $1', [row.id, updated]);
+  if (legacyTables.has('articles')) {
+    const articles = await pool.query<{ id: string; data: ShelterArticle }>('SELECT id, data FROM articles');
+    for (const row of articles.rows) {
+      const updated = await storeArticleMedia(row.data);
+      if (JSON.stringify(updated) !== JSON.stringify(row.data)) {
+        await pool.query('UPDATE articles SET data = $2 WHERE id = $1', [row.id, updated]);
+      }
     }
   }
 
@@ -286,10 +295,10 @@ async function externalizeDatabaseMedia(): Promise<void> {
 
 export async function initDatabase(): Promise<ServerDbStats> {
   await pool.query([
-    'CREATE TABLE IF NOT EXISTS cats (id text PRIMARY KEY, data jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())',
-    'CREATE TABLE IF NOT EXISTS applications (id text PRIMARY KEY, owner_id text NOT NULL, data jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())',
+    'CREATE TABLE IF NOT EXISTS cats (id text PRIMARY KEY, updated_at timestamptz NOT NULL DEFAULT now())',
+    'CREATE TABLE IF NOT EXISTS applications (id text PRIMARY KEY, owner_id text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())',
     'CREATE INDEX IF NOT EXISTS applications_owner_id_idx ON applications(owner_id)',
-    'CREATE TABLE IF NOT EXISTS articles (id text PRIMARY KEY, data jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())',
+    'CREATE TABLE IF NOT EXISTS articles (id text PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())',
     'DO $migration$ BEGIN ALTER TABLE articles ADD COLUMN created_at timestamptz; EXCEPTION WHEN duplicate_column THEN NULL; END $migration$',
     'UPDATE articles SET created_at = updated_at WHERE created_at IS NULL',
     'ALTER TABLE articles ALTER COLUMN created_at SET DEFAULT now()',
@@ -304,18 +313,6 @@ export async function initDatabase(): Promise<ServerDbStats> {
   ].join(';'));
 
   const legacy = readLegacyDatabase();
-  const counts = await pool.query<{ cats: string; articles: string; applications: string }>(
-    'SELECT (SELECT count(*) FROM cats)::text AS cats, (SELECT count(*) FROM articles)::text AS articles, (SELECT count(*) FROM applications)::text AS applications'
-  );
-  const row = counts.rows[0];
-  if (Number(row.cats) === 0) await insertRows('cats', (Array.isArray(legacy.cats) && legacy.cats.length ? legacy.cats : INITIAL_CATS).map(sanitizeCat));
-  if (Number(row.articles) === 0) await insertRows('articles', Array.isArray(legacy.articles) && legacy.articles.length ? legacy.articles : INITIAL_ARTICLES);
-  if (Number(row.applications) === 0 && Array.isArray(legacy.applications)) {
-    for (const item of legacy.applications) {
-      await pool.query('INSERT INTO applications (id, owner_id, data) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING', [item.id, 'legacy-import', item]);
-    }
-  }
-
   const adminCount = await pool.query<{ count: string }>('SELECT count(*)::text AS count FROM admin_users');
   if (Number(adminCount.rows[0].count) === 0) {
     const legacyPassword = typeof legacy.settings?.adminPassword === 'string' ? legacy.settings.adminPassword : undefined;
@@ -356,6 +353,42 @@ export async function initDatabase(): Promise<ServerDbStats> {
   await externalizeDatabaseMedia();
   await migrateMediaDirectory();
   await ensureRelationalSchema(pool);
+
+  const counts = await pool.query<{ cats: string; articles: string; applications: string }>(
+    'SELECT (SELECT count(*) FROM cats)::text AS cats, (SELECT count(*) FROM articles)::text AS articles, (SELECT count(*) FROM applications)::text AS applications'
+  );
+  const row = counts.rows[0];
+  const catsToSeed = Number(row.cats) === 0
+    ? (Array.isArray(legacy.cats) && legacy.cats.length ? legacy.cats : INITIAL_CATS)
+    : [];
+  const articlesToSeed = Number(row.articles) === 0
+    ? (Array.isArray(legacy.articles) && legacy.articles.length ? legacy.articles : INITIAL_ARTICLES)
+    : [];
+  const applicationsToSeed = Number(row.applications) === 0 && Array.isArray(legacy.applications)
+    ? legacy.applications
+    : [];
+  if (catsToSeed.length || articlesToSeed.length || applicationsToSeed.length) {
+    const storedCats: Cat[] = [];
+    for (const cat of catsToSeed) storedCats.push(await storeCatMedia(sanitizeCat(cat)));
+    const storedArticles: ShelterArticle[] = [];
+    for (const article of articlesToSeed) storedArticles.push(await storeArticleMedia(article));
+    const storedApplications: AdoptionApplication[] = [];
+    for (const application of applicationsToSeed) storedApplications.push(await storeApplicationMedia(application));
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const cat of storedCats) await writeCatRecord(client, cat, true);
+      for (const article of storedArticles) await writeArticleRecord(client, article, true);
+      for (const application of storedApplications) await writeApplicationRecord(client, 'legacy-import', application, true);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
   await pool.query('DELETE FROM admin_sessions WHERE expires_at <= now()');
   return getDatabaseStats();
 }

@@ -13,7 +13,7 @@ async function main() {
     cats: cats.length,
     articles: articles.length,
     applications: applications.length,
-    migration: 'relational-core-v1',
+    migration: 'relational-core-v2',
   }, null, 2));
 }
 

@@ -32,7 +32,8 @@ type ApplicationRow = QueryResultRow & {
   submitted_at_text: string; admin_notes: string | null;
 };
 
-const SCHEMA_VERSION = 1;
+const CORE_SCHEMA_VERSION = 1;
+const LEGACY_JSON_REMOVAL_VERSION = 2;
 
 async function addColumn(pool: Pool, table: string, definition: string): Promise<void> {
   try {
@@ -163,22 +164,58 @@ export async function ensureRelationalSchema(pool: Pool): Promise<void> {
     CREATE INDEX IF NOT EXISTS applications_cat_id_idx ON applications(cat_id);
   `);
 
-  const migrated = await pool.query('SELECT 1 FROM schema_migrations WHERE version = $1', [SCHEMA_VERSION]);
-  if (migrated.rowCount) {
-    await addRelationalConstraints(pool);
-    return;
+  const migrated = await pool.query('SELECT 1 FROM schema_migrations WHERE version = $1', [CORE_SCHEMA_VERSION]);
+  if (!migrated.rowCount) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const legacyColumns = await client.query<{ table_name: string }>(`
+        SELECT table_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND column_name = 'data'
+          AND table_name IN ('cats', 'articles', 'applications')
+      `);
+      const legacyTables = new Set(legacyColumns.rows.map((row) => row.table_name));
+      if (legacyTables.has('cats')) {
+        const cats = await client.query<{ data: Cat }>('SELECT data FROM cats');
+        for (const row of cats.rows) await writeCatRecord(client, row.data, false);
+      }
+      if (legacyTables.has('articles')) {
+        const articles = await client.query<{ data: ShelterArticle }>('SELECT data FROM articles');
+        for (const row of articles.rows) await writeArticleRecord(client, row.data, false);
+      }
+      if (legacyTables.has('applications')) {
+        const applications = await client.query<{ owner_id: string; data: AdoptionApplication }>('SELECT owner_id, data FROM applications');
+        for (const row of applications.rows) await writeApplicationRecord(client, row.owner_id, row.data, false);
+      }
+      await client.query('INSERT INTO schema_migrations (version, name) VALUES ($1, $2)', [CORE_SCHEMA_VERSION, 'normalize_core_entities']);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
+  await addRelationalConstraints(pool);
+  await removeLegacyJsonColumns(pool);
+}
+
+async function removeLegacyJsonColumns(pool: Pool): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const cats = await client.query<{ data: Cat }>('SELECT data FROM cats');
-    const articles = await client.query<{ data: ShelterArticle }>('SELECT data FROM articles');
-    const applications = await client.query<{ owner_id: string; data: AdoptionApplication }>('SELECT owner_id, data FROM applications');
-    for (const row of cats.rows) await writeCatRecord(client, row.data, false);
-    for (const row of articles.rows) await writeArticleRecord(client, row.data, false);
-    for (const row of applications.rows) await writeApplicationRecord(client, row.owner_id, row.data, false);
-    await client.query('INSERT INTO schema_migrations (version, name) VALUES ($1, $2)', [SCHEMA_VERSION, 'normalize_core_entities']);
+    await client.query(`
+      ALTER TABLE cats DROP COLUMN IF EXISTS data;
+      ALTER TABLE articles DROP COLUMN IF EXISTS data;
+      ALTER TABLE applications DROP COLUMN IF EXISTS data;
+    `);
+    await client.query(
+      'INSERT INTO schema_migrations (version, name) VALUES ($1, $2) ON CONFLICT (version) DO NOTHING',
+      [LEGACY_JSON_REMOVAL_VERSION, 'remove_redundant_core_json'],
+    );
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -186,8 +223,6 @@ export async function ensureRelationalSchema(pool: Pool): Promise<void> {
   } finally {
     client.release();
   }
-
-  await addRelationalConstraints(pool);
 }
 
 async function addRelationalConstraints(pool: Pool): Promise<void> {
@@ -261,14 +296,14 @@ export async function writeCatRecord(db: DatabaseClient, cat: Cat, insert: boole
     cat.habits.litterBox, cat.habits.scratchingPost, cat.habits.foodPreference,
     cat.health.vaccinated, cat.health.sterilized, cat.health.parasiteTreated, cat.health.fivFelvNegative,
     cat.health.specialNeeds || null, cat.goodWith.children, cat.goodWith.otherCats, cat.goodWith.dogs,
-    cat.arrivalDate, cat.status, Boolean(cat.featured), cat,
+    cat.arrivalDate, cat.status, Boolean(cat.featured),
   ];
   if (insert) {
     await db.query(`INSERT INTO cats (
       id,name,age,age_category,gender,size,weight_kg,temperament,color,breed,primary_photo_x,primary_photo_y,story,
       habit_litter_box,habit_scratching_post,habit_food_preference,health_vaccinated,health_sterilized,
       health_parasite_treated,health_fiv_felv_negative,health_special_needs,good_with_children,good_with_cats,
-      good_with_dogs,arrival_date,status,featured,data
+      good_with_dogs,arrival_date,status,featured
     ) VALUES (${values.map((_, index) => '$' + (index + 1)).join(',')})`, values);
   } else {
     await db.query(`UPDATE cats SET
@@ -276,7 +311,7 @@ export async function writeCatRecord(db: DatabaseClient, cat: Cat, insert: boole
       primary_photo_x=$11,primary_photo_y=$12,story=$13,habit_litter_box=$14,habit_scratching_post=$15,
       habit_food_preference=$16,health_vaccinated=$17,health_sterilized=$18,health_parasite_treated=$19,
       health_fiv_felv_negative=$20,health_special_needs=$21,good_with_children=$22,good_with_cats=$23,
-      good_with_dogs=$24,arrival_date=$25,status=$26,featured=$27,data=$28,updated_at=now() WHERE id=$1`, values);
+      good_with_dogs=$24,arrival_date=$25,status=$26,featured=$27,updated_at=now() WHERE id=$1`, values);
   }
   await replaceCatChildren(db, cat);
 }
@@ -334,15 +369,15 @@ export async function writeArticleRecord(db: DatabaseClient, article: ShelterArt
   const values = [article.id, article.title, article.category, article.summary, article.content,
     article.coverPosition?.x ?? null, article.coverPosition?.y ?? null, article.publishedAt, article.readTimeMinutes,
     article.author, article.authorRole || null, article.eventDate || null, article.eventLocation || null,
-    article.relatedCatId || null, article.likesCount || 0, article];
+    article.relatedCatId || null, article.likesCount || 0];
   if (insert) {
     await db.query(`INSERT INTO articles (id,title,category,summary,content,cover_position_x,cover_position_y,published_at,
-      read_time_minutes,author,author_role,event_date,event_location,related_cat_id,likes_count,data)
+      read_time_minutes,author,author_role,event_date,event_location,related_cat_id,likes_count)
       VALUES (${values.map((_, index) => '$' + (index + 1)).join(',')})`, values);
   } else {
     await db.query(`UPDATE articles SET title=$2,category=$3,summary=$4,content=$5,cover_position_x=$6,
       cover_position_y=$7,published_at=$8,read_time_minutes=$9,author=$10,author_role=$11,event_date=$12,
-      event_location=$13,related_cat_id=$14,likes_count=$15,data=$16,updated_at=now() WHERE id=$1`, values);
+      event_location=$13,related_cat_id=$14,likes_count=$15,updated_at=now() WHERE id=$1`, values);
   }
   await replaceArticleChildren(db, article);
 }
@@ -373,17 +408,17 @@ export async function writeApplicationRecord(db: DatabaseClient, ownerId: string
     application.applicantName, application.phone, application.email, application.city, application.housingType,
     application.hasWindowScreens, application.hasOtherPets, application.otherPetsDescription || null,
     application.hasExperience, application.experienceDescription || null, application.familyAgreement,
-    application.comment || null, application.status, application.createdAt, application.adminNotes || null, application];
+    application.comment || null, application.status, application.createdAt, application.adminNotes || null];
   if (insert) {
     await db.query(`INSERT INTO applications (id,owner_id,cat_id,cat_name,cat_photo_url,applicant_name,phone,email,city,
       housing_type,has_window_screens,has_other_pets,other_pets_description,has_experience,experience_description,
-      family_agreement,comment,status,submitted_at_text,admin_notes,data)
+      family_agreement,comment,status,submitted_at_text,admin_notes)
       VALUES (${values.map((_, index) => '$' + (index + 1)).join(',')})`, values);
   } else {
     await db.query(`UPDATE applications SET owner_id=$2,cat_id=$3,cat_name=$4,cat_photo_url=$5,applicant_name=$6,
       phone=$7,email=$8,city=$9,housing_type=$10,has_window_screens=$11,has_other_pets=$12,
       other_pets_description=$13,has_experience=$14,experience_description=$15,family_agreement=$16,
-      comment=$17,status=$18,submitted_at_text=$19,admin_notes=$20,data=$21,updated_at=now() WHERE id=$1`, values);
+      comment=$17,status=$18,submitted_at_text=$19,admin_notes=$20,updated_at=now() WHERE id=$1`, values);
   }
 }
 

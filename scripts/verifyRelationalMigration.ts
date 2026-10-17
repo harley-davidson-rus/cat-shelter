@@ -8,7 +8,6 @@ import {
   writeArticleRecord,
   writeCatRecord,
 } from '../server/relationalStore';
-import { normalizeArticleTag } from '../src/utils/seo';
 
 const config = {
   connectionString: process.env.DATABASE_URL,
@@ -27,27 +26,6 @@ async function main() {
     const cats = await readCats(test);
     const articles = await readArticles(test);
     const applications = await readApplications(test);
-    const sourceCats = await test.query<{ data: Record<string, any> }>('SELECT data FROM public.cats ORDER BY id');
-    const sourceArticles = await test.query<{ data: Record<string, any> }>('SELECT data FROM public.articles ORDER BY id');
-    const catById = new Map(cats.map((cat) => [cat.id, cat]));
-    const articleById = new Map(articles.map((article) => [article.id, article]));
-    const catMismatches = sourceCats.rows.filter(({ data: source }) => {
-      const migrated = catById.get(source.id);
-      return !migrated
-        || migrated.name !== source.name
-        || migrated.status !== source.status
-        || migrated.photos.length !== source.photos.length
-        || migrated.photos.some((url, index) => url !== source.photos[index])
-        || migrated.character.length !== source.character.length;
-    }).map(({ data }) => data.id);
-    const articleMismatches = sourceArticles.rows.filter(({ data: source }) => {
-      const migrated = articleById.get(source.id);
-      return !migrated
-        || migrated.title !== source.title
-        || migrated.coverImage !== source.coverImage
-        || JSON.stringify(migrated.tags) !== JSON.stringify(source.tags.map(normalizeArticleTag))
-        || migrated.likesCount !== (source.likesCount || 0);
-    }).map(({ data }) => data.id);
     const counts = (await test.query(`
       SELECT
         (SELECT count(*) FROM cats)::int AS cats,
@@ -63,6 +41,13 @@ async function main() {
       SELECT count(*)::int AS count
       FROM information_schema.table_constraints
       WHERE table_schema = 'public' AND constraint_type='FOREIGN KEY'
+    `)).rows[0].count;
+    const legacyDataColumns = (await test.query<{ count: number }>(`
+      SELECT count(*)::int AS count
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND column_name = 'data'
+        AND table_name IN ('cats', 'articles', 'applications')
     `)).rows[0].count;
     const sampleCat = { ...cats[0], id: 'verification-cat', name: 'Проверка миграции', photos: [...cats[0].photos] };
     await writeCatRecord(test, sampleCat, true);
@@ -106,11 +91,12 @@ async function main() {
       articleDetachedAfterCatDelete: relationResult.article_detached,
       applicationDetachedAfterCatDelete: relationResult.application_detached,
     };
-    const result = { counts, applications: applications.length, foreignKeys, catMismatches, articleMismatches, writeReadResult };
+    const readCountsMatch = cats.length === counts.cats && articles.length === counts.articles;
+    const result = { counts, applications: applications.length, foreignKeys, legacyDataColumns, readCountsMatch, writeReadResult };
     console.log(JSON.stringify(result, null, 2));
     if (
-      catMismatches.length
-      || articleMismatches.length
+      legacyDataColumns !== 0
+      || !readCountsMatch
       || !writeReadResult.articleCreatedAtPreservedOnUpdate
       || !writeReadResult.articleDetachedAfterCatDelete
       || !writeReadResult.applicationDetachedAfterCatDelete
