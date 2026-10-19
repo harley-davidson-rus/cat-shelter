@@ -3,6 +3,8 @@ import { X, Calendar, MapPin, Clock, User, Heart, Share2, Sparkles, Tag, ArrowRi
 import { ShelterArticle, Cat } from '../types';
 import { ArticleContent } from './ArticleContent';
 import { normalizeArticleTag } from '../utils/seo';
+import { PaymentQrImage } from './PaymentQrImage';
+import { findSbpPaymentUrl } from '../utils/paymentQr';
 
 interface ArticleDetailModalProps {
   article: ShelterArticle | null;
@@ -117,8 +119,9 @@ export const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({
 
           {/* Cover Hero Photo */}
           <div className="relative aspect-16/9 rounded-2xl overflow-hidden bg-stone-100 border border-stone-200">
-            <img
+            <PaymentQrImage
               src={article.coverImage}
+              paymentUrl={findSbpPaymentUrl(article.content)}
               alt={article.title}
               style={{ objectPosition: `${article.coverPosition?.x ?? 50}% ${article.coverPosition?.y ?? 50}%` }}
               className="w-full h-full object-cover"
@@ -131,7 +134,7 @@ export const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {article.galleryImages.map((image, index) => (
                   <div key={`${image.slice(0, 40)}-${index}`} className="rounded-2xl overflow-hidden border border-stone-200 bg-stone-50 aspect-4/3">
-                    <img src={image} alt={`${article.title} — фотография ${index + 2}`} className="w-full h-full object-contain" loading="lazy" />
+                    <PaymentQrImage src={image} alt={`${article.title} — фотография ${index + 2}`} className="w-full h-full object-contain" loading="lazy" />
                   </div>
                 ))}
               </div>

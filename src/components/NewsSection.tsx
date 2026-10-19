@@ -2,6 +2,8 @@ import React from 'react';
 import { Newspaper, PenTool, Calendar, Clock, Heart, ArrowRight, Sparkles, User, Tag } from 'lucide-react';
 import { ShelterArticle, ArticleCategory, Cat } from '../types';
 import { normalizeArticleTag } from '../utils/seo';
+import { PaymentQrImage } from './PaymentQrImage';
+import { findSbpPaymentUrl } from '../utils/paymentQr';
 
 interface NewsSectionProps {
   articles: ShelterArticle[];
@@ -115,8 +117,9 @@ export const NewsSection: React.FC<NewsSectionProps> = ({
                   <div>
                     {/* Cover image & Category Tag */}
                     <div className="relative aspect-16/10 overflow-hidden bg-stone-100">
-                      <img
+                      <PaymentQrImage
                         src={article.coverImage}
+                        paymentUrl={findSbpPaymentUrl(article.content)}
                         alt={article.title}
                         style={{ objectPosition: `${article.coverPosition?.x ?? 50}% ${article.coverPosition?.y ?? 50}%` }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"

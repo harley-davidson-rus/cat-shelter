@@ -3,6 +3,7 @@ import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIc
 import { Cat, CatSize, CatTemperament } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 import { sentenceCase } from '../utils/text';
+import { PaymentQrImage } from './PaymentQrImage';
 
 interface CatDetailModalProps {
   cat: Cat | null;
@@ -323,7 +324,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
       );
     }
     return (
-      <img
+      <PaymentQrImage
         src={item.url || realCatPhoto}
         alt={isCurrent ? cat.name : ''}
         draggable={false}
@@ -455,7 +456,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                       onClick={() => setIsPhotoFullscreen(true)}
                       title="Нажмите, чтобы открыть фото в полном размере"
                     >
-                      <img
+                      <PaymentQrImage
                         src={currentPhoto}
                         alt={cat.name}
                         draggable={false}
