@@ -23,6 +23,7 @@ interface NewsSectionProps {
 const CATEGORY_BADGES: Record<ArticleCategory, { label: string; bg: string }> = {
   rescue_story: { label: 'Спасение', bg: 'bg-emerald-500 text-white' },
   shelter_success: { label: 'Успех', bg: 'bg-amber-500 text-white' },
+  resources: { label: 'Ресурсы', bg: 'bg-violet-600 text-white' },
   event: { label: 'Событие', bg: 'bg-sky-600 text-white' },
 };
 

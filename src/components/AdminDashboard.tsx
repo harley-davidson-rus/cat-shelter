@@ -1515,6 +1515,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   ? 'Спасение'
                                   : art.category === 'shelter_success'
                                   ? 'Успех'
+                                  : art.category === 'resources'
+                                  ? 'Ресурсы и обеспечение'
                                   : 'Мероприятие'}
                               </span>
                               <span className="text-[11px] text-stone-400">{art.publishedAt}</span>

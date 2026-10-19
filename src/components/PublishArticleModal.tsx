@@ -296,10 +296,11 @@ export const PublishArticleModal: React.FC<PublishArticleModalProps> = ({
             <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-2">
               Рубрика статьи *
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {[
                 { id: 'rescue_story', label: '🐾 Спасённые кошки', desc: 'История спасения' },
                 { id: 'shelter_success', label: '🎉 Успехи передержки', desc: 'Счастливый хвостик' },
+                { id: 'resources', label: '📦 Ресурсы и обеспечение', desc: 'Корма, лекарства и сборы' },
                 { id: 'event', label: '📅 Мероприятие', desc: 'Выставки и маркеты' },
               ].map((catOption) => (
                 <button

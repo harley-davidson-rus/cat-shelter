@@ -129,7 +129,7 @@ export interface FilterOptions {
   status: 'all' | 'available' | 'reserved' | 'trial';
 }
 
-export type ArticleCategory = 'rescue_story' | 'shelter_success' | 'event';
+export type ArticleCategory = 'rescue_story' | 'shelter_success' | 'resources' | 'event';
 
 export interface ShelterArticle {
   id: string;

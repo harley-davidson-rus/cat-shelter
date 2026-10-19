@@ -27,6 +27,10 @@ const CATEGORY_STYLES = {
     label: 'Успехи передержки',
     bg: 'bg-amber-100 text-amber-900 border-amber-200',
   },
+  resources: {
+    label: 'Ресурсы и обеспечение',
+    bg: 'bg-violet-100 text-violet-900 border-violet-200',
+  },
   event: {
     label: 'Мероприятие',
     bg: 'bg-sky-100 text-sky-900 border-sky-200',
