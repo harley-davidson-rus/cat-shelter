@@ -120,6 +120,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({
                       <PaymentQrImage
                         src={article.coverImage}
                         paymentUrl={findSbpPaymentUrl(article.content)}
+                        paymentLinkEnabled={false}
                         alt={article.title}
                         style={{ objectPosition: `${article.coverPosition?.x ?? 50}% ${article.coverPosition?.y ?? 50}%` }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"

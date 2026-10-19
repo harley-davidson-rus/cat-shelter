@@ -3,9 +3,18 @@ import { detectSbpPaymentUrl, normalizeSbpPaymentUrl } from '../utils/paymentQr'
 
 type PaymentQrImageProps = React.ImgHTMLAttributes<HTMLImageElement> & {
   paymentUrl?: string | null;
+  paymentLinkEnabled?: boolean;
 };
 
-export const PaymentQrImage: React.FC<PaymentQrImageProps> = ({ src, alt, className, style, paymentUrl, ...imageProps }) => {
+export const PaymentQrImage: React.FC<PaymentQrImageProps> = ({
+  src,
+  alt,
+  className,
+  style,
+  paymentUrl,
+  paymentLinkEnabled = true,
+  ...imageProps
+}) => {
   const explicitPaymentUrl = paymentUrl ? normalizeSbpPaymentUrl(paymentUrl) : null;
   const [detectedPaymentUrl, setDetectedPaymentUrl] = useState<string | null>(null);
 
@@ -30,12 +39,17 @@ export const PaymentQrImage: React.FC<PaymentQrImageProps> = ({ src, alt, classN
       alt={alt}
       className={className}
       style={resolvedPaymentUrl
-        ? { ...style, objectFit: 'contain', objectPosition: 'center', cursor: 'pointer' }
+        ? {
+            ...style,
+            objectFit: 'contain',
+            objectPosition: 'center',
+            ...(paymentLinkEnabled ? { cursor: 'pointer' } : {}),
+          }
         : style}
     />
   );
 
-  if (!resolvedPaymentUrl) return image;
+  if (!resolvedPaymentUrl || !paymentLinkEnabled) return image;
 
   return (
     <a
