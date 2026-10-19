@@ -811,6 +811,20 @@ export default function App() {
         shelterStats={shelterStats}
       />
 
+      {/* News, Stories & Events Section */}
+      <NewsSection
+        articles={visibleArticles}
+        likedArticleIds={likedArticleIds}
+        onToggleLike={handleToggleArticleLike}
+        onReadArticle={openArticleDetail}
+        allCats={cats}
+        getArticleHref={(article) => articleSeoPath(article, articles)}
+        activeTag={selectedArticleTag}
+        getTagHref={articleTagPath}
+        onSelectTag={openArticleTag}
+        onClearTag={clearArticleTag}
+      />
+
       {/* Main Cats Catalog Section */}
       <main className="py-12 sm:py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1">
         {/* Section Heading */}
@@ -888,20 +902,6 @@ export default function App() {
           </div>
         )}
       </main>
-
-      {/* News, Stories & Events Section */}
-      <NewsSection
-        articles={visibleArticles}
-        likedArticleIds={likedArticleIds}
-        onToggleLike={handleToggleArticleLike}
-        onReadArticle={openArticleDetail}
-        allCats={cats}
-        getArticleHref={(article) => articleSeoPath(article, articles)}
-        activeTag={selectedArticleTag}
-        getTagHref={articleTagPath}
-        onSelectTag={openArticleTag}
-        onClearTag={clearArticleTag}
-      />
 
       {/* Rules & Process Section */}
       <AdoptionRulesSection

@@ -44,8 +44,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </a>
 
           <nav className="hidden min-[1180px]:flex items-center gap-4 min-[1320px]:gap-6 text-sm font-medium text-stone-600" aria-label="Основная навигация">
-            <a href="#cats" className="hover:text-amber-600 transition-colors whitespace-nowrap">Анкеты котиков</a>
             <a href="#news" className="hover:text-amber-600 transition-colors whitespace-nowrap">Новости и истории</a>
+            <a href="#cats" className="hover:text-amber-600 transition-colors whitespace-nowrap">Анкеты котиков</a>
             <a href="#rules" className="hover:text-amber-600 transition-colors whitespace-nowrap">Как взять котика</a>
             <a href="#about" className="hover:text-amber-600 transition-colors whitespace-nowrap">О передержке</a>
             <a href="#contacts" className="hover:text-amber-600 transition-colors whitespace-nowrap">Контакты</a>
@@ -108,13 +108,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         {isMobileMenuOpen && (
           <div id="mobile-navigation" className="min-[1180px]:hidden pb-4 border-t border-stone-100">
             <nav className="grid grid-cols-1 sm:grid-cols-2 gap-1 pt-3" aria-label="Мобильная навигация">
-              <a href="#cats" onClick={closeMobileMenu} className={mobileLinkClass}>
-                <CatIcon className="w-5 h-5 text-amber-500 shrink-0" />
-                <span>Анкеты котиков</span>
-              </a>
               <a href="#news" onClick={closeMobileMenu} className={mobileLinkClass}>
                 <Newspaper className="w-5 h-5 text-amber-500 shrink-0" />
                 <span>Новости и истории</span>
+              </a>
+              <a href="#cats" onClick={closeMobileMenu} className={mobileLinkClass}>
+                <CatIcon className="w-5 h-5 text-amber-500 shrink-0" />
+                <span>Анкеты котиков</span>
               </a>
               <a href="#rules" onClick={closeMobileMenu} className={mobileLinkClass}>
                 <ClipboardCheck className="w-5 h-5 text-amber-500 shrink-0" />
