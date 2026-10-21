@@ -4,6 +4,7 @@ import { Cat, CatGender, CatSize, CatTemperament, AgeCategory, CatStatus, CatVid
 import realCatPhoto from '../assets/defaultCat';
 import { compressImageFile } from '../utils/storage';
 import { apiVerifyAdminPassword, isAdminAuthenticationError } from '../utils/api';
+import { getCatStatusLabel } from '../utils/catStatus';
 
 
 interface AddEditCatModalProps {
@@ -852,10 +853,10 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
                 onChange={(e) => setStatus(e.target.value as CatStatus)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm bg-white"
               >
-                <option value="available">Ищет дом</option>
-                <option value="reserved">На бронировании</option>
-                <option value="trial">На испытательном сроке</option>
-                <option value="adopted">Уже дома</option>
+                <option value="available">{getCatStatusLabel('available', gender)}</option>
+                <option value="reserved">{getCatStatusLabel('reserved', gender)}</option>
+                <option value="trial">{getCatStatusLabel('trial', gender)}</option>
+                <option value="adopted">{getCatStatusLabel('adopted', gender)}</option>
               </select>
             </div>
           </div>

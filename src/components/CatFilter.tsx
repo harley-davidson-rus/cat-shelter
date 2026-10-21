@@ -1,6 +1,7 @@
 import React from 'react';
 import { Filter, X, Sparkles, Check, Baby, Dog, Users, Smile, Heart, Zap, Coffee, Compass, Search } from 'lucide-react';
 import { FilterOptions, AgeCategory, CatGender, CatSize, CatTemperament } from '../types';
+import { CAT_STATUS_FILTER_LABELS } from '../utils/catStatus';
 
 interface CatFilterProps {
   filters: FilterOptions;
@@ -222,13 +223,7 @@ export const CatFilter: React.FC<CatFilterProps> = ({
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-stone-500">Статус:</span>
           <div className="flex flex-wrap p-1 bg-stone-100 rounded-xl">
-            {(['all', 'available', 'reserved', 'trial'] as const).map((statusOption) => {
-              const labels = {
-                all: 'Все',
-                available: 'Ищут дом',
-                reserved: 'Бронь',
-                trial: 'Испытательный срок',
-              };
+            {(['all', 'available', 'reserved', 'trial', 'adopted'] as const).map((statusOption) => {
               const isSelected = filters.status === statusOption;
               return (
                 <button
@@ -240,7 +235,7 @@ export const CatFilter: React.FC<CatFilterProps> = ({
                       : 'text-stone-500 hover:text-stone-800'
                   }`}
                 >
-                  {labels[statusOption]}
+                  {CAT_STATUS_FILTER_LABELS[statusOption]}
                 </button>
               );
             })}

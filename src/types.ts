@@ -126,7 +126,7 @@ export interface FilterOptions {
   goodWithDogs: boolean;
   vaccinatedOnly: boolean;
   sterilizedOnly: boolean;
-  status: 'all' | 'available' | 'reserved' | 'trial';
+  status: 'all' | CatStatus;
 }
 
 export type ArticleCategory = 'rescue_story' | 'shelter_success' | 'resources' | 'event';

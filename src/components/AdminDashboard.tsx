@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getCatStatusLabel } from '../utils/catStatus';
 import {
   Lock,
   LogOut,
@@ -1387,13 +1388,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         : 'bg-stone-200 text-stone-700'
                                 }`}
                               >
-                                {cat.status === 'available'
-                                  ? 'Ищет дом'
-                                  : cat.status === 'reserved'
-                                    ? 'На бронировании'
-                                    : cat.status === 'trial'
-                                      ? 'На испытательном сроке'
-                                      : 'Уже дома'}
+                                {getCatStatusLabel(cat.status, cat.gender)}
                               </span>
                             </div>
                             <p className="text-xs text-stone-500 mt-1 line-clamp-2 sm:truncate">

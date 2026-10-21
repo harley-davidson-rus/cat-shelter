@@ -4,6 +4,7 @@ import { Cat, CatSize, CatTemperament } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 import { sentenceCase } from '../utils/text';
 import { PaymentQrImage } from './PaymentQrImage';
+import { getCatStatusLabel } from '../utils/catStatus';
 
 interface CatDetailModalProps {
   cat: Cat | null;
@@ -600,13 +601,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                             : 'bg-stone-200 text-stone-700'
                     )}
                   >
-                    {cat.status === 'available'
-                      ? 'Ищет дом'
-                      : cat.status === 'reserved'
-                        ? 'На бронировании'
-                        : cat.status === 'trial'
-                          ? 'На испытательном сроке'
-                          : 'Уже дома'}
+                    {getCatStatusLabel(cat.status, cat.gender)}
                   </span>
                   <span className="text-sm font-bold text-amber-600">
                     {cat.gender === 'male' ? 'Мальчик' : 'Девочка'}

@@ -3,6 +3,7 @@ import { Heart, ShieldCheck, Check, Sparkles, ArrowRight, Baby, Cat as CatIcon, 
 import { Cat, CatSize, CatTemperament } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 import { sentenceCase } from '../utils/text';
+import { getCatStatusLabel } from '../utils/catStatus';
 
 interface CatCardProps {
   cat: Cat;
@@ -85,13 +86,7 @@ export const CatCard: React.FC<CatCardProps> = ({
   searchQuery = '',
 }) => {
   const isAvailable = cat.status === 'available';
-  const statusLabel = cat.status === 'available'
-    ? 'Ищет дом'
-    : cat.status === 'reserved'
-      ? 'На бронировании'
-      : cat.status === 'trial'
-        ? 'На испытательном сроке'
-        : 'Уже дома';
+  const statusLabel = getCatStatusLabel(cat.status, cat.gender);
   const hasVideos = cat.videos && cat.videos.length > 0;
   const normalizedSearch = normalizeSearch(searchQuery);
   const storyMatches = Boolean(normalizedSearch && cat.story.toLocaleLowerCase('ru').includes(normalizedSearch));
