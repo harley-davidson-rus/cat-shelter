@@ -152,6 +152,8 @@ export interface ShelterArticle {
   relatedCatId?: string;
   tags: string[];
   likesCount?: number;
+  fundraisingClosed?: boolean;
+  issueClosed?: boolean;
 }
 
 

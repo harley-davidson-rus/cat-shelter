@@ -36,6 +36,8 @@ export const PublishArticleModal: React.FC<PublishArticleModalProps> = ({
   const [eventLocation, setEventLocation] = useState('г. Москва, центр фонда «Доброта\u00A0для\u00A0кота»');
   const [tagsInput, setTagsInput] = useState('Доброта\u00A0для\u00A0кота, Кошки, Новости');
   const [readTimeMinutes, setReadTimeMinutes] = useState(3);
+  const [fundraisingClosed, setFundraisingClosed] = useState(false);
+  const [issueClosed, setIssueClosed] = useState(false);
   const [coverPosition, setCoverPosition] = useState({ x: 50, y: 50 });
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [articleVideos, setArticleVideos] = useState<CatVideo[]>([]);
@@ -68,6 +70,8 @@ export const PublishArticleModal: React.FC<PublishArticleModalProps> = ({
     setEventLocation(article?.eventLocation || 'г. Москва, центр фонда «Доброта для кота»');
     setTagsInput(article?.tags?.join(', ') || 'Доброта для кота, Кошки, Новости');
     setReadTimeMinutes(article?.readTimeMinutes || 3);
+    setFundraisingClosed(Boolean(article?.fundraisingClosed));
+    setIssueClosed(Boolean(article?.issueClosed));
     setIsSaving(false);
   }, [isOpen, initialArticle]);
 
@@ -250,6 +254,8 @@ export const PublishArticleModal: React.FC<PublishArticleModalProps> = ({
       authorRole: authorRole.trim() || 'Волонтёр',
       eventDate: category === 'event' ? eventDate.trim() : undefined,
       eventLocation: category === 'event' ? eventLocation.trim() : undefined,
+      fundraisingClosed,
+      issueClosed,
         tags: tags.length > 0 ? tags : ['Доброта\u00A0для\u00A0кота'],
       });
       onClose();
@@ -317,6 +323,32 @@ export const PublishArticleModal: React.FC<PublishArticleModalProps> = ({
                   <div className="text-[11px] text-stone-500">{catOption.desc}</div>
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <div className="text-xs font-bold text-stone-700 uppercase tracking-wider mb-3">
+              Статус новости
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-3 py-3 cursor-pointer hover:border-amber-300">
+                <input
+                  type="checkbox"
+                  checked={fundraisingClosed}
+                  onChange={(event) => setFundraisingClosed(event.target.checked)}
+                  className="h-4 w-4 accent-amber-500"
+                />
+                <span className="text-xs font-semibold text-stone-800">Сбор закрыт</span>
+              </label>
+              <label className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-3 py-3 cursor-pointer hover:border-amber-300">
+                <input
+                  type="checkbox"
+                  checked={issueClosed}
+                  onChange={(event) => setIssueClosed(event.target.checked)}
+                  className="h-4 w-4 accent-amber-500"
+                />
+                <span className="text-xs font-semibold text-stone-800">Вопрос закрыт</span>
+              </label>
             </div>
           </div>
 

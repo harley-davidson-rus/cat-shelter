@@ -164,6 +164,21 @@ export const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({
               {article.title}
             </h1>
 
+            {(article.fundraisingClosed || article.issueClosed) && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {article.fundraisingClosed && (
+                  <span className="px-3 py-1.5 rounded-full bg-stone-900 text-white text-xs font-bold">
+                    Сбор закрыт
+                  </span>
+                )}
+                {article.issueClosed && (
+                  <span className="px-3 py-1.5 rounded-full bg-stone-900 text-white text-xs font-bold">
+                    Вопрос закрыт
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center gap-4 text-xs text-stone-500 pb-4 border-b border-stone-100">
               <div className="flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-stone-400" />

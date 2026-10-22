@@ -21,6 +21,7 @@ type ArticleRow = QueryResultRow & {
   cover_position_x: number | null; cover_position_y: number | null; published_at: string;
   read_time_minutes: number; author: string; author_role: string | null; event_date: string | null;
   event_location: string | null; related_cat_id: string | null; likes_count: number;
+  fundraising_closed: boolean; issue_closed: boolean;
 };
 
 type ApplicationRow = QueryResultRow & {
@@ -73,6 +74,7 @@ export async function ensureRelationalSchema(pool: Pool): Promise<void> {
       "published_at text NOT NULL DEFAULT ''", 'read_time_minutes integer NOT NULL DEFAULT 3',
       "author text NOT NULL DEFAULT ''", 'author_role text', 'event_date text', 'event_location text',
       'related_cat_id text', 'likes_count integer NOT NULL DEFAULT 0',
+      'fundraising_closed boolean NOT NULL DEFAULT false', 'issue_closed boolean NOT NULL DEFAULT false',
     ],
     applications: [
       'cat_id text', "cat_name text NOT NULL DEFAULT ''", 'cat_photo_url text',
@@ -377,15 +379,16 @@ export async function writeArticleRecord(db: DatabaseClient, article: ShelterArt
   const values = [article.id, article.title, article.category, article.summary, article.content,
     article.coverPosition?.x ?? null, article.coverPosition?.y ?? null, article.publishedAt, article.readTimeMinutes,
     article.author, article.authorRole || null, article.eventDate || null, article.eventLocation || null,
-    article.relatedCatId || null, article.likesCount || 0];
+    article.relatedCatId || null, article.likesCount || 0, Boolean(article.fundraisingClosed), Boolean(article.issueClosed)];
   if (insert) {
     await db.query(`INSERT INTO articles (id,title,category,summary,content,cover_position_x,cover_position_y,published_at,
-      read_time_minutes,author,author_role,event_date,event_location,related_cat_id,likes_count)
+      read_time_minutes,author,author_role,event_date,event_location,related_cat_id,likes_count,fundraising_closed,issue_closed)
       VALUES (${values.map((_, index) => '$' + (index + 1)).join(',')})`, values);
   } else {
     await db.query(`UPDATE articles SET title=$2,category=$3,summary=$4,content=$5,cover_position_x=$6,
       cover_position_y=$7,published_at=$8,read_time_minutes=$9,author=$10,author_role=$11,event_date=$12,
-      event_location=$13,related_cat_id=$14,likes_count=$15,updated_at=now() WHERE id=$1`, values);
+      event_location=$13,related_cat_id=$14,likes_count=$15,fundraising_closed=$16,issue_closed=$17,
+      updated_at=now() WHERE id=$1`, values);
   }
   await replaceArticleChildren(db, article);
 }
@@ -407,6 +410,7 @@ export async function readArticles(db: DatabaseClient): Promise<ShelterArticle[]
       authorRole: row.author_role || undefined, eventDate: row.event_date || undefined, eventLocation: row.event_location || undefined,
       relatedCatId: row.related_cat_id || undefined,
       tags: tags.rows.filter((item) => item.article_id === row.id).map((item) => item.name), likesCount: row.likes_count,
+      fundraisingClosed: row.fundraising_closed, issueClosed: row.issue_closed,
     };
   });
 }

@@ -1515,6 +1515,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   : 'Мероприятие'}
                               </span>
                               <span className="text-[11px] text-stone-400">{art.publishedAt}</span>
+                              {art.fundraisingClosed && (
+                                <span className="px-2 py-0.5 rounded-md bg-stone-900 text-white text-[10px] font-bold">Сбор закрыт</span>
+                              )}
+                              {art.issueClosed && (
+                                <span className="px-2 py-0.5 rounded-md bg-stone-900 text-white text-[10px] font-bold">Вопрос закрыт</span>
+                              )}
                             </div>
                             <h5 className="font-bold text-sm text-stone-900 mt-1 line-clamp-1">
                               {art.title}

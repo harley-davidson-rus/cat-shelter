@@ -130,7 +130,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({
                       <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none" />
 
                       {/* Category Badge */}
-                      <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                      <div className="absolute top-3 left-3 right-14 flex flex-wrap items-center gap-1.5">
                         <span
                           className={`px-2.5 py-1 rounded-full text-[11px] font-bold shadow-xs ${badge.bg}`}
                         >
@@ -141,6 +141,16 @@ export const NewsSection: React.FC<NewsSectionProps> = ({
                           <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-white/95 text-stone-900 shadow-xs flex items-center gap-1">
                             <Calendar className="w-3 h-3 text-sky-600" />
                             <span>Анонс</span>
+                          </span>
+                        )}
+                        {article.fundraisingClosed && (
+                          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-stone-900 text-white shadow-xs">
+                            Сбор закрыт
+                          </span>
+                        )}
+                        {article.issueClosed && (
+                          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-stone-900 text-white shadow-xs">
+                            Вопрос закрыт
                           </span>
                         )}
                       </div>
