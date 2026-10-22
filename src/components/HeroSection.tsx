@@ -76,7 +76,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             </h1>
 
             <p className="text-base sm:text-lg text-stone-600 max-w-2xl leading-relaxed">
-              Фонд помощи животным <span className="whitespace-nowrap">«Доброта&nbsp;для&nbsp;кота»</span> лечит, социализирует и&nbsp;бережно передаёт котиков в&nbsp;заботливые руки после подписания согласия на ответственное содержание. Познакомьтесь с&nbsp;нашими подопечными онлайн и&nbsp;подайте заявку на&nbsp;усыновление прямо сейчас!
+              Фонд помощи животным <span className="whitespace-nowrap">«Доброта&nbsp;для&nbsp;кота»</span> лечит, социализирует и&nbsp;бережно передаёт котиков в&nbsp;заботливые руки после подписания согласия на ответственное содержание. Познакомьтесь с&nbsp;нашими подопечными он-лайн. Вы можете подать заявку на&nbsp;понравившегося котика.
             </p>
 
             {/* Quick Action Buttons */}
