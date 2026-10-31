@@ -2,7 +2,7 @@ import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import pg from 'pg';
+import pg, { type PoolClient } from 'pg';
 import bcrypt from 'bcryptjs';
 import {
   Cat, AdoptionApplication, ShelterArticle, ShelterStats, SiteContacts, DonationSettings, DatabaseBackupSettings,
@@ -797,6 +797,50 @@ function normalizeEmail(email: string): string {
   return email.trim().toLocaleLowerCase('en-US');
 }
 
+async function deleteUnreferencedMediaAssets(client: PoolClient, mediaUrls: Array<string | null>): Promise<string[]> {
+  const fileNames = [...new Set(mediaUrls
+    .map((url) => url ? getStoredMediaFileName(url) : null)
+    .filter((fileName): fileName is string => Boolean(fileName)))];
+  if (!fileNames.length) return [];
+
+  const deleted = await client.query<{ file_name: string }>(`
+    DELETE FROM media_assets AS asset
+    WHERE asset.file_name = ANY($1::text[])
+      AND NOT EXISTS (SELECT 1 FROM owner_content WHERE media_url = '/media/' || asset.file_name)
+      AND NOT EXISTS (SELECT 1 FROM cat_photos WHERE asset_file_name = asset.file_name)
+      AND NOT EXISTS (SELECT 1 FROM cat_videos WHERE asset_file_name = asset.file_name OR thumbnail_asset_file_name = asset.file_name)
+      AND NOT EXISTS (SELECT 1 FROM article_images WHERE asset_file_name = asset.file_name)
+      AND NOT EXISTS (SELECT 1 FROM article_videos WHERE asset_file_name = asset.file_name OR thumbnail_asset_file_name = asset.file_name)
+      AND NOT EXISTS (SELECT 1 FROM applications WHERE cat_photo_url = '/media/' || asset.file_name)
+      AND NOT EXISTS (SELECT 1 FROM site_settings WHERE position('/media/' || asset.file_name IN data::text) > 0)
+    RETURNING asset.file_name
+  `, [fileNames]);
+  return deleted.rows.map((row) => row.file_name);
+}
+
+async function deleteOwnerContentRows(client: PoolClient, email: string, catIds?: string[]): Promise<string[]> {
+  const values: unknown[] = [normalizeEmail(email)];
+  const catFilter = catIds ? ' AND cat_id = ANY($2::text[])' : '';
+  if (catIds) values.push(catIds);
+  const media = await client.query<{ media_url: string | null }>(
+    `DELETE FROM owner_content WHERE author_email = $1${catFilter} RETURNING media_url`,
+    values,
+  );
+  return deleteUnreferencedMediaAssets(client, media.rows.map((row) => row.media_url));
+}
+
+async function removeLegacyMediaFiles(fileNames: string[]): Promise<void> {
+  await Promise.all(fileNames.map(async (fileName) => {
+    try {
+      await fs.promises.unlink(path.join(MEDIA_DIR, fileName));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn(`Не удалось удалить неиспользуемый медиафайл ${fileName}:`, error);
+      }
+    }
+  }));
+}
+
 function secureTokenHash(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
@@ -976,22 +1020,42 @@ export async function createStaffUser(email: string, password: string, displayNa
 
 export async function updateManagedUser(email: string, displayName: string, role: UserRole): Promise<UserAccount | null> {
   const normalized = normalizeEmail(email);
-  const current = await pool.query<{ role: UserRole }>('SELECT role FROM shelter_users WHERE email = $1', [normalized]);
-  if (!current.rowCount) return null;
-  if (current.rows[0].role === 'administrator' && role !== 'administrator') {
-    const administrators = await pool.query<{ count: string }>("SELECT count(*)::text AS count FROM shelter_users WHERE role = 'administrator'");
-    if (Number(administrators.rows[0].count) <= 1) {
-      throw Object.assign(new Error('Нельзя изменить роль единственного администратора'), { status: 400 });
+  const client = await pool.connect();
+  let updated: UserRow | null = null;
+  let deletedFiles: string[] = [];
+  try {
+    await client.query('BEGIN');
+    const current = await client.query<{ role: UserRole }>('SELECT role FROM shelter_users WHERE email = $1 FOR UPDATE', [normalized]);
+    if (!current.rowCount) {
+      await client.query('ROLLBACK');
+      return null;
     }
+    if (current.rows[0].role === 'administrator' && role !== 'administrator') {
+      const administrators = await client.query<{ count: string }>("SELECT count(*)::text AS count FROM shelter_users WHERE role = 'administrator'");
+      if (Number(administrators.rows[0].count) <= 1) {
+        throw Object.assign(new Error('Нельзя изменить роль единственного администратора'), { status: 400 });
+      }
+    }
+    const result = await client.query<UserRow>(`
+      UPDATE shelter_users
+      SET display_name = $2, role = $3, updated_at = now()
+      WHERE email = $1
+      RETURNING email, display_name, password_hash, role, verified_at, created_at
+    `, [normalized, displayName.trim() || normalized, role]);
+    updated = result.rows[0];
+    if (role !== 'owner') {
+      deletedFiles = await deleteOwnerContentRows(client, normalized);
+      await client.query('DELETE FROM cat_owners WHERE owner_email = $1', [normalized]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-  const result = await pool.query<UserRow>(`
-    UPDATE shelter_users
-    SET display_name = $2, role = $3, updated_at = now()
-    WHERE email = $1
-    RETURNING email, display_name, password_hash, role, verified_at, created_at
-  `, [normalized, displayName.trim() || normalized, role]);
-  if (role !== 'owner') await pool.query('DELETE FROM cat_owners WHERE owner_email = $1', [normalized]);
-  return accountFromRow(result.rows[0]);
+  await removeLegacyMediaFiles(deletedFiles);
+  return updated ? accountFromRow(updated) : null;
 }
 
 export async function assignUserCats(email: string, catIds: string[]): Promise<UserAccount | null> {
@@ -1000,6 +1064,7 @@ export async function assignUserCats(email: string, catIds: string[]): Promise<U
   if (!user.rowCount) return null;
   const uniqueCatIds = [...new Set(catIds)];
   const client = await pool.connect();
+  let deletedFiles: string[] = [];
   try {
     await client.query('BEGIN');
     for (const catId of [...uniqueCatIds].sort()) {
@@ -1025,6 +1090,12 @@ export async function assignUserCats(email: string, catIds: string[]): Promise<U
         throw Object.assign(new Error(`Котик «${catName}» уже привязан к другому владельцу`), { status: 409 });
       }
     }
+    const existingAssignments = await client.query<{ cat_id: string }>('SELECT cat_id FROM cat_owners WHERE owner_email = $1', [normalized]);
+    const retainedCatIds = new Set(uniqueCatIds);
+    const detachedCatIds = existingAssignments.rows
+      .map((row) => row.cat_id)
+      .filter((catId) => !retainedCatIds.has(catId));
+    if (detachedCatIds.length) deletedFiles = await deleteOwnerContentRows(client, normalized, detachedCatIds);
     await client.query('DELETE FROM cat_owners WHERE owner_email = $1', [normalized]);
     for (const catId of uniqueCatIds) {
       await client.query('INSERT INTO cat_owners (cat_id, owner_email) VALUES ($1, $2)', [catId, normalized]);
@@ -1036,18 +1107,46 @@ export async function assignUserCats(email: string, catIds: string[]): Promise<U
   } finally {
     client.release();
   }
+  await removeLegacyMediaFiles(deletedFiles);
   return accountFromRow(user.rows[0]);
 }
 
 export async function deleteManagedUser(email: string, actorRole: UserRole): Promise<boolean> {
   const normalized = normalizeEmail(email);
-  const result = await pool.query<{ role: UserRole; verified_at: Date | null }>('SELECT role, verified_at FROM shelter_users WHERE email = $1', [normalized]);
-  if (!result.rowCount) return false;
-  const target = result.rows[0];
-  if (actorRole === 'curator' && (target.role !== 'owner' || target.verified_at)) return false;
-  if (actorRole !== 'administrator' && target.role !== 'owner') return false;
-  if (target.role === 'administrator') return false;
-  return Boolean((await pool.query('DELETE FROM shelter_users WHERE email = $1', [normalized])).rowCount);
+  const client = await pool.connect();
+  let deletedFiles: string[] = [];
+  let success = false;
+  try {
+    await client.query('BEGIN');
+    const result = await client.query<{ role: UserRole; verified_at: Date | null }>('SELECT role, verified_at FROM shelter_users WHERE email = $1 FOR UPDATE', [normalized]);
+    if (!result.rowCount) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    const target = result.rows[0];
+    if (actorRole === 'curator' && (target.role !== 'owner' || target.verified_at)) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    if (actorRole !== 'administrator' && target.role !== 'owner') {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    if (target.role === 'administrator') {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    deletedFiles = await deleteOwnerContentRows(client, normalized);
+    success = Boolean((await client.query('DELETE FROM shelter_users WHERE email = $1', [normalized])).rowCount);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  await removeLegacyMediaFiles(deletedFiles);
+  return success;
 }
 
 export async function getCatsForOwner(email: string): Promise<Cat[]> {
@@ -1137,7 +1236,27 @@ export async function updateOwnerContent(email: string, id: string, text: string
 }
 
 export async function deleteOwnerContent(email: string, id: string): Promise<boolean> {
-  return Boolean((await pool.query(`DELETE FROM owner_content WHERE id = $1 AND author_email = $2 AND kind IN ('photo','video','comment')`, [id, normalizeEmail(email)])).rowCount);
+  const client = await pool.connect();
+  let deletedFiles: string[] = [];
+  let success = false;
+  try {
+    await client.query('BEGIN');
+    const removed = await client.query<{ media_url: string | null }>(`
+      DELETE FROM owner_content
+      WHERE id = $1 AND author_email = $2 AND kind IN ('photo','video','comment')
+      RETURNING media_url
+    `, [id, normalizeEmail(email)]);
+    success = Boolean(removed.rowCount);
+    deletedFiles = await deleteUnreferencedMediaAssets(client, removed.rows.map((row) => row.media_url));
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  await removeLegacyMediaFiles(deletedFiles);
+  return success;
 }
 
 export async function moderateOwnerContent(id: string, status: OwnerContent['moderationStatus'], answer: string | undefined, staffEmail: string): Promise<OwnerContent | null> {
