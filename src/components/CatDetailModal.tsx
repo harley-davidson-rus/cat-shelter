@@ -686,7 +686,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
 
             {/* Quick Details Column */}
             <div className="md:col-span-6 flex flex-col justify-between">
-              <div className="hidden md:block">
+              <div className={activeContentTab === 'home' ? 'hidden md:block' : 'block'}>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <span
                     className={'px-3 py-1 rounded-full text-xs font-bold ' + (
