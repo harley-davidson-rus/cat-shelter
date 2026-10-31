@@ -68,6 +68,7 @@ import {
   CatRating,
   VisitAnalytics,
 } from '../utils/api';
+import { PASSWORD_PATTERN, PASSWORD_REQUIREMENTS } from '../utils/password';
 import { OwnerDashboard } from './OwnerDashboard';
 import { UsersManagement } from './UsersManagement';
 
@@ -843,13 +844,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setNewPasswordInput(e.target.value)}
                     minLength={8}
                     maxLength={200}
-                    pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])[A-Za-z0-9]{8,200}"
-                    title="Минимум 8 символов: строчные и заглавные латинские буквы и цифры, без специальных символов"
+                    pattern={PASSWORD_PATTERN}
+                    title={PASSWORD_REQUIREMENTS}
                     placeholder="Минимум 8 символов"
                     required
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
-                  <p className="mt-1 text-[11px] text-stone-500">Только a-z, A-Z и цифры, без специальных символов.</p>
+                  <p className="mt-1 text-[11px] text-stone-500">{PASSWORD_REQUIREMENTS}</p>
                 </div>
 
                 <div>
@@ -926,7 +927,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 : authMode === 'forgot'
                   ? 'Мы отправим ссылку для создания нового пароля на указанный e-mail.'
                   : authMode === 'reset'
-                    ? 'Пароль должен содержать строчные и заглавные латинские буквы и цифры, без специальных символов.'
+                    ? PASSWORD_REQUIREMENTS
                     : 'Войдите как администратор, куратор или новый хозяин котика.'}
             </p>
 
@@ -964,14 +965,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {!['forgot'].includes(authMode) && <div className="mt-3">
                   <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Пароль</label>
                   <div className="relative">
-                    <input ref={passwordInputRef} type="password" value={passwordInput} onChange={(event) => { setPasswordInput(event.target.value); setLoginError(''); }} minLength={['register', 'reset'].includes(authMode) ? 8 : undefined} maxLength={['register', 'reset'].includes(authMode) ? 200 : undefined} pattern={['register', 'reset'].includes(authMode) ? '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])[A-Za-z0-9]{8,200}' : undefined} title={['register', 'reset'].includes(authMode) ? 'Минимум 8 символов: строчные и заглавные латинские буквы и цифры, без специальных символов' : undefined} required className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                    <input ref={passwordInputRef} type="password" value={passwordInput} onChange={(event) => { setPasswordInput(event.target.value); setLoginError(''); }} minLength={['register', 'reset'].includes(authMode) ? 8 : undefined} maxLength={['register', 'reset'].includes(authMode) ? 200 : undefined} pattern={['register', 'reset'].includes(authMode) ? PASSWORD_PATTERN : undefined} title={['register', 'reset'].includes(authMode) ? PASSWORD_REQUIREMENTS : undefined} required className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
                     <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
                   </div>
                 </div>}
                 {['register', 'reset'].includes(authMode) && <div className="mt-3">
                   <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Подтверждение пароля</label>
                   <input type="password" value={passwordConfirmInput} onChange={(event) => setPasswordConfirmInput(event.target.value)} placeholder="Повторите пароль" className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
-                  <p className="mt-1.5 text-[11px] text-stone-500">Минимум 8 символов: a-z, A-Z и цифры. Специальные символы нельзя использовать.</p>
+                  <p className="mt-1.5 text-[11px] text-stone-500">{PASSWORD_REQUIREMENTS}</p>
                 </div>}
                 {authMessage && <p className="mt-3 p-3 rounded-xl bg-emerald-50 text-xs text-emerald-800 text-left break-words">{authMessage}</p>}
                 {loginError && (
