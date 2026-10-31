@@ -61,10 +61,23 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentU
     return users.filter((user) => !query || user.email.includes(query) || user.displayName.toLocaleLowerCase('ru-RU').includes(query));
   }, [search, users]);
 
+  const getAssignableCats = (user: UserAccount) => {
+    const catsAssignedToOtherOwners = new Set(
+      users
+        .filter((candidate) => candidate.role === 'owner' && candidate.email !== user.email)
+        .flatMap((candidate) => candidate.catIds)
+    );
+    return cats.filter((cat) =>
+      (cat.status === 'adopted' || cat.status === 'trial')
+      && !catsAssignedToOtherOwners.has(cat.id)
+    );
+  };
+
   const openUser = (user: UserAccount) => {
     const isOpening = expandedEmail !== user.email;
     setExpandedEmail(isOpening ? user.email : '');
-    setDraftCatIds(isOpening ? user.catIds : []);
+    const assignableCatIds = new Set(getAssignableCats(user).map((cat) => cat.id));
+    setDraftCatIds(isOpening ? user.catIds.filter((catId) => assignableCatIds.has(catId)) : []);
     setEditDisplayName(isOpening ? user.displayName : '');
     setEditRole(user.role);
     setMessage(null);
@@ -282,9 +295,13 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentU
                 {user.role === 'owner' && <>
                   <div>
                     <h5 className="text-xs font-bold uppercase tracking-wide text-stone-600 mb-2">Привязанные котики</h5>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {cats.map((cat) => <label key={cat.id} className="flex items-center gap-2 p-2.5 rounded-xl bg-white border border-stone-200 text-sm"><input type="checkbox" checked={draftCatIds.includes(cat.id)} onChange={(event) => setDraftCatIds((ids) => event.target.checked ? [...ids, cat.id] : ids.filter((id) => id !== cat.id))} /> <span className="truncate">{cat.name}</span></label>)}
-                    </div>
+                    {getAssignableCats(user).length > 0 ? (
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {getAssignableCats(user).map((cat) => <label key={cat.id} className="flex items-center gap-2 p-2.5 rounded-xl bg-white border border-stone-200 text-sm"><input type="checkbox" checked={draftCatIds.includes(cat.id)} onChange={(event) => setDraftCatIds((ids) => event.target.checked ? [...ids, cat.id] : ids.filter((id) => id !== cat.id))} /> <span className="truncate">{cat.name}</span></label>)}
+                      </div>
+                    ) : (
+                      <p className="p-3 rounded-xl border border-stone-200 bg-white text-xs text-stone-500">Нет свободных котиков со статусом «Нашёл дом» или «На испытательном сроке».</p>
+                    )}
                   </div>
                   <button type="button" onClick={() => saveCats(user)} className="px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold flex items-center gap-2"><Save className="w-4 h-4" /> Сохранить котиков</button>
                 </>}

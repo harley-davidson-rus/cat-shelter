@@ -998,11 +998,35 @@ export async function assignUserCats(email: string, catIds: string[]): Promise<U
   const normalized = normalizeEmail(email);
   const user = await pool.query<UserRow>('SELECT email, display_name, password_hash, role, verified_at, created_at FROM shelter_users WHERE email = $1 AND role = $2', [normalized, 'owner']);
   if (!user.rowCount) return null;
+  const uniqueCatIds = [...new Set(catIds)];
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    for (const catId of [...uniqueCatIds].sort()) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1)::bigint)', [catId]);
+    }
+    const allCats = new Map((await getAllCats()).map((cat) => [cat.id, cat]));
+    const invalidCatId = uniqueCatIds.find((catId) => {
+      const cat = allCats.get(catId);
+      return !cat || (cat.status !== 'adopted' && cat.status !== 'trial');
+    });
+    if (invalidCatId) {
+      throw Object.assign(new Error('Можно привязать только котиков со статусом «Нашёл дом» или «На испытательном сроке»'), { status: 400 });
+    }
+    if (uniqueCatIds.length > 0) {
+      const occupied = await client.query<{ cat_id: string; owner_email: string }>(`
+        SELECT cat_id, owner_email
+        FROM cat_owners
+        WHERE cat_id = ANY($1::text[]) AND owner_email <> $2
+        LIMIT 1
+      `, [uniqueCatIds, normalized]);
+      if (occupied.rowCount) {
+        const catName = allCats.get(occupied.rows[0].cat_id)?.name || occupied.rows[0].cat_id;
+        throw Object.assign(new Error(`Котик «${catName}» уже привязан к другому владельцу`), { status: 409 });
+      }
+    }
     await client.query('DELETE FROM cat_owners WHERE owner_email = $1', [normalized]);
-    for (const catId of [...new Set(catIds)]) {
+    for (const catId of uniqueCatIds) {
       await client.query('INSERT INTO cat_owners (cat_id, owner_email) VALUES ($1, $2)', [catId, normalized]);
     }
     await client.query('COMMIT');
