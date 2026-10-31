@@ -241,7 +241,26 @@ function validate<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data;
 }
 
-const PUBLIC_ORIGIN = (process.env.PUBLIC_ORIGIN || 'https://kind4cat.ru').replace(/\/$/, '');
+const CANONICAL_PUBLIC_ORIGIN = 'https://kind4cat.ru';
+
+function resolvePublicOrigin(): string {
+  const configuredOrigin = (process.env.PUBLIC_ORIGIN || CANONICAL_PUBLIC_ORIGIN).replace(/\/$/, '');
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(configuredOrigin);
+  } catch {
+    throw new Error('PUBLIC_ORIGIN must be a valid absolute URL');
+  }
+  if (!['http:', 'https:'].includes(parsedOrigin.protocol) || parsedOrigin.origin !== configuredOrigin) {
+    throw new Error('PUBLIC_ORIGIN must contain only the http(s) origin without a path, query, or hash');
+  }
+  if (isProduction && parsedOrigin.origin !== CANONICAL_PUBLIC_ORIGIN) {
+    throw new Error(`Production PUBLIC_ORIGIN must be ${CANONICAL_PUBLIC_ORIGIN}`);
+  }
+  return parsedOrigin.origin;
+}
+
+const PUBLIC_ORIGIN = resolvePublicOrigin();
 
 async function sendTransactionalEmail(to: string, subject: string, text: string): Promise<void> {
   const webhook = process.env.EMAIL_DELIVERY_WEBHOOK;

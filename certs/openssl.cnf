@@ -18,6 +18,5 @@ subjectAltName = @alt_names
 [alt_names]
 DNS.1 = cat-shelter.local
 IP.1 = 127.0.0.1
-IP.2 = 192.168.250.2
-IP.3 = 85.21.168.157
+IP.2 = 85.21.168.157
 
