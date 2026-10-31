@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIcon, Dog, Calendar, HeartHandshake, Video, Play, Image as ImageIcon, Upload, Edit3, Maximize2, Link2, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Cat, CatSize, CatTemperament } from '../types';
+import { X, Heart, ShieldCheck, Check, Sparkles, AlertCircle, Baby, Cat as CatIcon, Dog, Calendar, HeartHandshake, Video, Play, Image as ImageIcon, Upload, Edit3, Maximize2, Link2, ChevronLeft, ChevronRight, Newspaper, Settings } from 'lucide-react';
+import { Cat, CatSize, CatTemperament, OwnerContent } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 import { sentenceCase } from '../utils/text';
 import { PaymentQrImage } from './PaymentQrImage';
 import { getCatStatusLabel } from '../utils/catStatus';
+import { apiGetAdminSession, apiGetOwnerContent } from '../utils/api';
 
 interface CatDetailModalProps {
   cat: Cat | null;
@@ -12,6 +13,7 @@ interface CatDetailModalProps {
   onClose: () => void;
   onToggleFavorite: (id: string) => void;
   onApplyForAdoption: (cat: Cat) => void;
+  onOpenOwnerDashboard?: (catId: string) => void;
   shareUrl: string;
 }
 
@@ -39,6 +41,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   onClose,
   onToggleFavorite,
   onApplyForAdoption,
+  onOpenOwnerDashboard,
   shareUrl,
 }) => {
   if (!cat) return null;
@@ -61,18 +64,64 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   const fullscreenSwipeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fullscreenSwipeOffset, setFullscreenSwipeOffset] = useState(0);
   const [isFullscreenSwipeAnimating, setIsFullscreenSwipeAnimating] = useState(false);
+  const [ownerContent, setOwnerContent] = useState<OwnerContent[]>([]);
+  const [activeContentTab, setActiveContentTab] = useState<'profile' | 'home'>('profile');
+  const [canManageHomeContent, setCanManageHomeContent] = useState(false);
 
-  const currentVideo = cat.videos?.[activeVideoIdx];
-  const currentPhoto = cat.photos[activePhotoIdx] || cat.photos[0] || realCatPhoto;
-  const previousPhoto = activePhotoIdx > 0 ? cat.photos[activePhotoIdx - 1] : null;
-  const nextPhoto = activePhotoIdx < cat.photos.length - 1 ? cat.photos[activePhotoIdx + 1] : null;
+  useEffect(() => {
+    if (!['trial', 'adopted'].includes(cat.status)) {
+      setOwnerContent([]);
+      return;
+    }
+    let cancelled = false;
+    apiGetOwnerContent(cat.id)
+      .then((items) => { if (!cancelled) setOwnerContent(items); })
+      .catch(() => { if (!cancelled) setOwnerContent([]); });
+    return () => { cancelled = true; };
+  }, [cat.id, cat.status]);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGetAdminSession()
+      .then((session) => {
+        if (!cancelled) setCanManageHomeContent(Boolean(
+          session.authenticated
+          && session.user?.role === 'owner'
+          && session.user.catIds.includes(cat.id)
+        ));
+      })
+      .catch(() => { if (!cancelled) setCanManageHomeContent(false); });
+    return () => { cancelled = true; };
+  }, [cat.id]);
+
+  const approvedHomePhotos = ownerContent
+    .filter((item) => item.kind === 'photo' && item.mediaUrl && item.moderationStatus === 'approved')
+    .map((item) => item.mediaUrl as string);
+  const approvedHomeVideos = ownerContent
+    .filter((item) => item.kind === 'video' && item.mediaUrl && item.moderationStatus === 'approved')
+    .map((item) => ({
+      id: item.id,
+      url: item.mediaUrl as string,
+      title: `Видео ${cat.name} из дома`,
+      duration: 'Видео из дома',
+      thumbnail: '',
+      isShort: true,
+    }));
+  const ownerMessages = ownerContent.filter((item) => item.kind === 'comment' || item.kind === 'question');
+  const profilePhotos = cat.photos.length > 0 ? cat.photos : [realCatPhoto];
+  const galleryPhotos = activeContentTab === 'home' ? approvedHomePhotos : profilePhotos;
+  const galleryVideos = activeContentTab === 'home' ? approvedHomeVideos : (cat.videos || []);
+  const hasGalleryMedia = galleryPhotos.length > 0 || galleryVideos.length > 0;
+  const currentVideo = galleryVideos[activeVideoIdx];
+  const currentPhoto = galleryPhotos[activePhotoIdx] || galleryPhotos[0] || realCatPhoto;
+  const previousPhoto = activePhotoIdx > 0 ? galleryPhotos[activePhotoIdx - 1] : null;
+  const nextPhoto = activePhotoIdx < galleryPhotos.length - 1 ? galleryPhotos[activePhotoIdx + 1] : null;
   const photoSwipeTransition = isPhotoSwipeAnimating
     ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'
     : 'none';
-  const galleryPhotos = cat.photos.length > 0 ? cat.photos : [realCatPhoto];
   const mediaItems: GalleryMediaItem[] = [
     ...galleryPhotos.map((url, index) => ({ type: 'photo' as const, index, url })),
-    ...(cat.videos || []).map((video, index) => ({
+    ...galleryVideos.map((video, index) => ({
       type: 'video' as const,
       index,
       url: video.url,
@@ -82,13 +131,20 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   ];
   const activeMediaIndex = activeMediaType === 'photo'
     ? Math.min(activePhotoIdx, galleryPhotos.length - 1)
-    : galleryPhotos.length + Math.min(activeVideoIdx, Math.max((cat.videos?.length || 1) - 1, 0));
+    : galleryPhotos.length + Math.min(activeVideoIdx, Math.max((galleryVideos.length || 1) - 1, 0));
   const currentMediaItem = mediaItems[activeMediaIndex] || mediaItems[0];
   const previousMediaItem = activeMediaIndex > 0 ? mediaItems[activeMediaIndex - 1] : null;
   const nextMediaItem = activeMediaIndex < mediaItems.length - 1 ? mediaItems[activeMediaIndex + 1] : null;
   const fullscreenSwipeTransition = isFullscreenSwipeAnimating
     ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'
     : 'none';
+
+  useEffect(() => {
+    setActivePhotoIdx(0);
+    setActiveVideoIdx(0);
+    setActiveMediaType(galleryPhotos.length > 0 ? 'photo' : 'video');
+    setIsPhotoFullscreen(false);
+  }, [activeContentTab, approvedHomePhotos.length, approvedHomeVideos.length]);
 
   const handleCopyLink = async () => {
     let copied = false;
@@ -169,7 +225,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
     }
 
     const targetIndex = direction === 'next'
-      ? Math.min(activePhotoIdx + 1, cat.photos.length - 1)
+      ? Math.min(activePhotoIdx + 1, galleryPhotos.length - 1)
       : Math.max(activePhotoIdx - 1, 0);
     requestAnimationFrame(() => scrollThumbnailStripsTo(targetIndex));
 
@@ -178,7 +234,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
     photoSwipeTimer.current = setTimeout(() => {
       setActivePhotoIdx((index) =>
         direction === 'next'
-          ? Math.min(index + 1, cat.photos.length - 1)
+          ? Math.min(index + 1, galleryPhotos.length - 1)
           : Math.max(index - 1, 0)
       );
       setPhotoSwipeOffset(0);
@@ -198,7 +254,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   const handlePhotoTouchMove = (event: React.TouchEvent) => {
     const start = photoTouchStart.current;
     const touch = event.touches[0];
-    if (!start || !touch || isPhotoSwipeAnimating || cat.photos.length < 2) return;
+    if (!start || !touch || isPhotoSwipeAnimating || galleryPhotos.length < 2) return;
 
     const deltaX = touch.clientX - start.x;
     const deltaY = touch.clientY - start.y;
@@ -206,14 +262,14 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
 
     const atEdge =
       (deltaX > 0 && activePhotoIdx === 0) ||
-      (deltaX < 0 && activePhotoIdx === cat.photos.length - 1);
+      (deltaX < 0 && activePhotoIdx === galleryPhotos.length - 1);
     setPhotoSwipeOffset(atEdge ? deltaX * 0.22 : deltaX);
   };
 
   const handlePhotoTouchEnd = (event: React.TouchEvent) => {
     const start = photoTouchStart.current;
     const touch = event.changedTouches[0];
-    if (!start || !touch || cat.photos.length < 2) {
+    if (!start || !touch || galleryPhotos.length < 2) {
       finishPhotoSwipe(null);
       return;
     }
@@ -396,10 +452,43 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
 
         {/* Scrollable Body */}
         <div className="overflow-y-auto p-6 space-y-6">
+          {['trial', 'adopted'].includes(cat.status) && (
+            <div className="flex flex-wrap items-center gap-2 p-1.5 bg-stone-100 rounded-2xl" role="tablist" aria-label="Разделы анкеты котика">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeContentTab === 'profile'}
+                onClick={() => setActiveContentTab('profile')}
+                className={'px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors ' + (activeContentTab === 'profile' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-900')}
+              >
+                <CatIcon className="w-4 h-4" /> Анкета
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeContentTab === 'home'}
+                onClick={() => setActiveContentTab('home')}
+                className={'px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors ' + (activeContentTab === 'home' ? 'bg-amber-500 text-white shadow-sm' : 'text-stone-600 hover:text-stone-900')}
+              >
+                <Newspaper className="w-4 h-4" /> Вести из дома
+              </button>
+              {activeContentTab === 'home' && canManageHomeContent && onOpenOwnerDashboard && (
+                <button
+                  type="button"
+                  onClick={() => onOpenOwnerDashboard(cat.id)}
+                  className="sm:ml-auto px-4 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-sm font-bold flex items-center gap-2"
+                >
+                  <Settings className="w-4 h-4" /> Добавить материалы
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Main Hero Media & Quick Bio */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             {/* Gallery Column */}
             <div className="md:col-span-6 space-y-3">
+              {hasGalleryMedia ? <>
               {/* Media viewer (Photo or Video) */}
               <div
                 className="aspect-4/3 rounded-2xl overflow-hidden bg-stone-950 shadow-inner relative flex items-center justify-center group touch-pan-y"
@@ -502,10 +591,10 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                     }`}
                   >
                     <ImageIcon className="w-3.5 h-3.5" />
-                    <span>Фото ({cat.photos.length})</span>
+                    <span>Фото ({galleryPhotos.length})</span>
                   </button>
 
-                  {cat.videos && cat.videos.length > 0 && (
+                  {galleryVideos.length > 0 && (
                     <button
                       onClick={() => setActiveMediaType('video')}
                       className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
@@ -515,7 +604,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                       }`}
                     >
                       <Video className="w-3.5 h-3.5" />
-                      <span>Видео ({cat.videos.length})</span>
+                      <span>Видео ({galleryVideos.length})</span>
                     </button>
                   )}
                 </div>
@@ -524,7 +613,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
               {/* Media Thumbnails Slider */}
               <div ref={photoThumbnailsRef} className="flex gap-2 overflow-x-auto pb-1 scroll-smooth">
                 {/* Photo thumbnails */}
-                {cat.photos.map((photoUrl, idx) => (
+                {galleryPhotos.map((photoUrl, idx) => (
                   <button
                     key={`p-${idx}`}
                     data-media-index={idx}
@@ -549,11 +638,12 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                       }}
                       className="w-full h-full object-cover"
                     />
+                    {idx >= profilePhotos.length && <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[8px] font-bold">Из дома</span>}
                   </button>
                 ))}
 
                 {/* Video thumbnails */}
-                {cat.videos?.map((vid, vIdx) => (
+                {galleryVideos.map((vid, vIdx) => (
                   <button
                     key={vid.id || `v-${vIdx}`}
                     data-media-index={galleryPhotos.length + vIdx}
@@ -581,9 +671,17 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                         <Play className="w-3 h-3 fill-white ml-0.5" />
                       </div>
                     </div>
+                    {vIdx >= (cat.videos?.length || 0) && <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[8px] font-bold">Из дома</span>}
                   </button>
                 ))}
               </div>
+              </> : (
+                <div className="min-h-64 rounded-2xl border-2 border-dashed border-stone-200 bg-stone-50 flex flex-col items-center justify-center text-center p-8">
+                  <ImageIcon className="w-10 h-10 text-stone-300 mb-3" />
+                  <h3 className="font-heading text-lg font-bold text-stone-800">Пока нет фото и видео из дома</h3>
+                  <p className="mt-1 text-sm text-stone-500">После проверки куратором новые материалы появятся здесь.</p>
+                </div>
+              )}
             </div>
 
             {/* Quick Details Column */}
@@ -682,6 +780,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
             </div>
           </div>
 
+          {activeContentTab === 'profile' ? <>
           {/* Rescue Story Section */}
           {cat.story ? (
             <div className="p-5 bg-amber-50/40 rounded-2xl border border-amber-100">
@@ -786,6 +885,34 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
               </div>
             </div>
           </div>
+          </> : (
+            <section className="border border-amber-200 bg-amber-50/40 rounded-2xl p-5 sm:p-6 space-y-5">
+              <div>
+                <h3 className="font-heading text-xl font-bold text-stone-900">Вести из дома</h3>
+                <p className="text-sm text-stone-600 mt-1">Истории, комментарии и ответы кураторов о жизни {cat.name} дома.</p>
+              </div>
+              {ownerMessages.length > 0 ? (
+                <div className="space-y-4">
+                  {ownerMessages.map((item) => (
+                    <article key={item.id} className="bg-white border border-amber-100 rounded-2xl p-4 sm:p-5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <strong className="text-sm text-amber-900">{item.authorDisplayName}</strong>
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">{item.kind === 'question' ? 'Вопрос' : 'Комментарий'}</span>
+                        </div>
+                        <span className="text-xs text-stone-400">{new Date(item.createdAt).toLocaleDateString('ru-RU')}</span>
+                      </div>
+                      {item.text && <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-line">{item.text}</p>}
+                      {item.answer && <div className="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-950"><strong className="block mb-1">Ответ куратора</strong><p className="whitespace-pre-line">{item.answer}</p></div>}
+                      {item.moderationStatus !== 'approved' && <p className="mt-3 text-xs text-amber-700">Материал ожидает проверки и пока виден только вам и сотрудникам фонда.</p>}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="p-4 rounded-xl bg-white border border-amber-100 text-sm text-stone-500">Комментариев и вопросов пока нет.</p>
+              )}
+            </section>
+          )}
         </div>
 
         {/* Modal Footer Bar */}

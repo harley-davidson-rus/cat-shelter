@@ -6,6 +6,8 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import crypto from 'crypto';
 import { z } from 'zod';
+import QRCode from 'qrcode';
+import nodemailer from 'nodemailer';
 import {
   initDatabase, getAllCats, getBootstrapData, saveCat, deleteCat,
   getAllApplications, getApplicationsForOwner, createApplication, updateApplication, deleteApplication,
@@ -16,6 +18,11 @@ import {
   getPreferences, setPreference, getCatRatings, recordSiteVisit, getVisitAnalytics, verifyAdminPassword, changeAdminPassword,
   createAdminSession, hasAdminSession, deleteAdminSession,
   getDatabaseStats, getMediaAsset, setDatabaseBackupSettings,
+  authenticateUser, createUserSession, deleteUserSession, getUserBySession, attachUserCat, setPendingUserCat,
+  registerOwner, resendVerification, verifyRegistration, createPasswordReset, resetPassword,
+  changeUserPassword, updateUserProfile, listUsers, createStaffUser, updateManagedUser, assignUserCats, deleteManagedUser,
+  getCatsForOwner, getOwnerContentForCat, getPendingOwnerContent, createOwnerContent, updateOwnerContent,
+  deleteOwnerContent, moderateOwnerContent,
 } from './server/db';
 import {
   assertBackupDirectoryWritable,
@@ -30,7 +37,8 @@ import {
   reloadAutomaticBackupScheduler,
   startAutomaticBackupScheduler,
 } from './server/backupScheduler';
-import type { Cat, ShelterArticle } from './src/types';
+import { ensureBrowserCompatibleVideo } from './server/videoTranscode';
+import type { Cat, OwnerContent, ShelterArticle, UserAccount, UserRole } from './src/types';
 import {
   articleSeoPath,
   articleTagPath,
@@ -41,8 +49,8 @@ import {
   normalizeArticleTag,
 } from './src/utils/seo';
 
-const ADMIN_COOKIE = 'shelter_admin_session';
-const VISITOR_COOKIE = 'shelter_visitor';
+const ADMIN_COOKIE = process.env.SESSION_COOKIE_NAME || 'shelter_admin_session';
+const VISITOR_COOKIE = process.env.VISITOR_COOKIE_NAME || 'shelter_visitor';
 const SESSION_MS = 12 * 60 * 60 * 1000;
 const COOKIE_SECRET = process.env.COOKIE_SECRET;
 const isProduction = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
@@ -50,7 +58,7 @@ const httpsEnabled = process.env.HTTPS_ENABLED === 'true';
 const listenHost = process.env.HOST || '127.0.0.1';
 if (!COOKIE_SECRET || COOKIE_SECRET.length < 32) throw new Error('COOKIE_SECRET must contain at least 32 characters');
 
-type ShelterRequest = Request & { visitorId?: string; adminTokenHash?: string };
+type ShelterRequest = Request & { visitorId?: string; adminTokenHash?: string; user?: UserAccount };
 
 const objectSchema = z.object({}).passthrough();
 const shelterStatsSchema = z.object({
@@ -77,7 +85,14 @@ const donationSettingsSchema = z.object({
   description: z.string().trim().min(1).max(1000),
   image: z.string().min(1).max(14000000),
 });
-const passwordSchema = z.string().min(8).max(200);
+const passwordSchema = z.string()
+  .min(8, 'Пароль должен содержать минимум 8 символов')
+  .max(200, 'Пароль не должен быть длиннее 200 символов')
+  .regex(/[a-z]/, 'Пароль должен содержать строчную латинскую букву')
+  .regex(/[A-Z]/, 'Пароль должен содержать заглавную латинскую букву')
+  .regex(/[0-9]/, 'Пароль должен содержать цифру')
+  .regex(/^[A-Za-z0-9]+$/, 'Пароль может содержать только латинские буквы и цифры');
+const emailSchema = z.string().trim().email().max(320);
 const databaseBackupSettingsSchema = z.object({
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   retentionCount: z.number().int().min(1).max(90),
@@ -101,6 +116,30 @@ function parseCookies(req: Request): Record<string, string> {
 
 function sign(value: string): string {
   return crypto.createHmac('sha256', COOKIE_SECRET as string).update(value).digest('hex');
+}
+
+function catInviteSignature(catId: string): string {
+  return sign(`cat-invite:${catId}`);
+}
+
+function catRegistrationUrl(catId: string): string {
+  return `${PUBLIC_ORIGIN}/?register=1&catId=${encodeURIComponent(catId)}&invite=${catInviteSignature(catId)}`;
+}
+
+function isValidCatInvite(catId: string, signature: string): boolean {
+  const expected = catInviteSignature(catId);
+  return signature.length === expected.length
+    && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
+async function resolveInvitedCat(catId?: string, invite?: string): Promise<Cat | undefined> {
+  if (!catId && !invite) return undefined;
+  if (!catId || !invite || !isValidCatInvite(catId, invite)) {
+    throw Object.assign(new Error('Ссылка привязки котика недействительна'), { status: 400 });
+  }
+  const cat = (await getAllCats()).find((candidate) => candidate.id === catId);
+  if (!cat) throw Object.assign(new Error('Котик из ссылки не найден'), { status: 404 });
+  return cat;
 }
 
 function signedVisitor(value?: string): { id: string; cookie: string } {
@@ -143,25 +182,98 @@ async function requireAdmin(req: ShelterRequest, res: Response, next: NextFuncti
       return;
     }
     const hash = tokenHash(token);
-    if (!(await hasAdminSession(hash))) {
+    const user = await getUserBySession(hash);
+    if (!user || !['administrator', 'curator'].includes(user.role)) {
       clearCookie(res, ADMIN_COOKIE);
       res.status(401).json({ error: 'Session expired' });
       return;
     }
     req.adminTokenHash = hash;
+    req.user = user;
     next();
   } catch (error) {
     next(error);
   }
 }
 
+async function optionalUser(req: ShelterRequest, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    const token = parseCookies(req)[ADMIN_COOKIE];
+    if (token) {
+      const hash = tokenHash(token);
+      const user = await getUserBySession(hash);
+      if (user) {
+        req.adminTokenHash = hash;
+        req.user = user;
+      }
+    }
+    next();
+  } catch (error) { next(error); }
+}
+
+async function requireUser(req: ShelterRequest, res: Response, next: NextFunction): Promise<void> {
+  await optionalUser(req, res, () => {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    next();
+  });
+}
+
+function requireRole(...roles: UserRole[]) {
+  return (req: ShelterRequest, res: Response, next: NextFunction): void => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      res.status(403).json({ error: 'Недостаточно прав для выполнения действия' });
+      return;
+    }
+    next();
+  };
+}
+
 function validate<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
-  if (!result.success) throw new Error(result.error.issues.map((issue) => issue.message).join(', '));
+  if (!result.success) {
+    const error = new Error(result.error.issues.map((issue) => issue.message).join(', ')) as Error & { status: number };
+    error.status = 400;
+    throw error;
+  }
   return result.data;
 }
 
-const PUBLIC_ORIGIN = 'https://kind4cat.ru';
+const PUBLIC_ORIGIN = (process.env.PUBLIC_ORIGIN || 'https://kind4cat.ru').replace(/\/$/, '');
+
+async function sendTransactionalEmail(to: string, subject: string, text: string): Promise<void> {
+  const webhook = process.env.EMAIL_DELIVERY_WEBHOOK;
+  if (webhook) {
+    const response = await fetch(webhook, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.EMAIL_DELIVERY_TOKEN ? { Authorization: `Bearer ${process.env.EMAIL_DELIVERY_TOKEN}` } : {}),
+      },
+      body: JSON.stringify({ to, subject, text }),
+    });
+    if (!response.ok) throw Object.assign(new Error('Сервис отправки писем временно недоступен'), { status: 503 });
+    return;
+  }
+
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const password = process.env.SMTP_PASSWORD;
+  const from = process.env.EMAIL_FROM || user;
+  if (!host || !user || !password || !from) {
+    throw Object.assign(new Error('Отправка писем не настроена. Укажите SMTP_HOST, SMTP_USER, SMTP_PASSWORD и EMAIL_FROM.'), { status: 503 });
+  }
+  const port = Number(process.env.SMTP_PORT || 587);
+  const transport = nodemailer.createTransport({
+    host,
+    port,
+    secure: process.env.SMTP_SECURE === 'true' || port === 465,
+    auth: { user, pass: password },
+  });
+  await transport.sendMail({ from, to, subject, text });
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -656,22 +768,51 @@ async function startServer() {
   app.get('/api/site-stats', async (_req, res, next) => {
     try { res.json(await getShelterStats()); } catch (error) { next(error); }
   });
-  app.put('/api/site-stats', requireAdmin, async (req, res, next) => {
+  app.put('/api/site-stats', requireAdmin, requireRole('administrator'), async (req, res, next) => {
     try { res.json(await setShelterStats(validate(shelterStatsSchema, req.body))); } catch (error) { next(error); }
   });
 
   app.get('/api/site-contacts', async (_req, res, next) => {
     try { res.json(await getSiteContacts()); } catch (error) { next(error); }
   });
-  app.put('/api/site-contacts', requireAdmin, async (req, res, next) => {
+  app.put('/api/site-contacts', requireAdmin, requireRole('administrator'), async (req, res, next) => {
     try { res.json(await setSiteContacts(validate(siteContactsSchema, req.body))); } catch (error) { next(error); }
   });
 
   app.get('/api/donation-settings', async (_req, res, next) => {
     try { res.json(await getDonationSettings()); } catch (error) { next(error); }
   });
-  app.put('/api/donation-settings', requireAdmin, async (req, res, next) => {
+  app.put('/api/donation-settings', requireAdmin, requireRole('administrator'), async (req, res, next) => {
     try { res.json(await setDonationSettings(validate(donationSettingsSchema, req.body))); } catch (error) { next(error); }
+  });
+
+  app.get('/api/cats/:id/memo-print', requireAdmin, async (req, res, next) => {
+    try {
+      const cat = (await getAllCats()).find((candidate) => candidate.id === req.params.id);
+      if (!cat) return res.status(404).type('text/plain').send('Котик не найден');
+      const registrationUrl = catRegistrationUrl(cat.id);
+      const qrCode = await QRCode.toDataURL(registrationUrl, { width: 220, margin: 1, errorCorrectionLevel: 'M' });
+      res.type('html').send(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Памятка — ${escapeHtml(cat.name)}</title><style>
+        body{font-family:Arial,sans-serif;color:#1c1917;margin:0}.memo{box-sizing:border-box;min-height:100vh;padding:24mm 20mm;display:grid;grid-template-columns:1fr 48mm;gap:12mm;align-items:start}.memo h1{font-size:22pt;margin:0 0 8mm}.memo h2{font-size:15pt;margin:0 0 4mm}.memo p,.memo li{font-size:11pt;line-height:1.45}.qr{text-align:center}.qr img{width:48mm;height:48mm}.qr a{font-size:8pt;word-break:break-all}.actions{position:fixed;right:16px;top:16px;display:flex;align-items:flex-start;gap:8px;z-index:2}.email-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:560px}.email-form input{box-sizing:border-box;width:260px;padding:10px 12px;border:1px solid #d6d3d1;border-radius:10px;font:14px Arial;background:white}.actions button{font:600 14px Arial;padding:10px 14px;border-radius:10px;border:0;background:#f59e0b;color:white;cursor:pointer;white-space:nowrap}.actions button.secondary{background:#1c1917}.actions button:disabled{opacity:.6;cursor:wait}.email-status{flex-basis:100%;text-align:right;font-size:12px;color:#166534;min-height:15px}.email-status.error{color:#be123c}@media(max-width:850px){.actions{position:static;padding:12px;justify-content:flex-end;flex-wrap:wrap}.memo{padding-top:12mm}.email-form input{width:220px}}@media print{.actions{display:none}}
+      </style></head><body><div class="actions"><form id="email-form" class="email-form"><input id="recipient-email" type="email" required autocomplete="email" placeholder="E-mail получателя" aria-label="E-mail получателя"><button id="email-submit" class="secondary" type="submit">Отправить на e-mail</button><span id="email-status" class="email-status" role="status"></span></form><button type="button" onclick="window.print()">Печать памятки</button></div><section class="memo"><div><h1>Памятка нового хозяина</h1><h2>Котик: ${escapeHtml(cat.name)}</h2><p>Отсканируйте QR-код. Ссылка уже содержит защищённую привязку к этому котику.</p><ul><li>Если у вас уже есть аккаунт владельца, выберите вход — котик сразу появится в личном кабинете.</li><li>Если аккаунта ещё нет, зарегистрируйтесь и подтвердите e-mail; после подтверждения котик будет привязан автоматически.</li><li>Пароль должен быть не короче 8 символов и содержать строчные и заглавные латинские буквы и цифры, без специальных символов.</li><li>Если письма нет, проверьте папку «Спам».</li><li>В личном кабинете можно задавать вопросы и публиковать вести о котике.</li></ul></div><div class="qr"><img src="${qrCode}" alt="QR-код привязки котика"><p><a href="${registrationUrl}">${registrationUrl}</a></p></div></section><script>
+        document.getElementById('email-form').addEventListener('submit',async function(event){event.preventDefault();var input=document.getElementById('recipient-email');var button=document.getElementById('email-submit');var status=document.getElementById('email-status');button.disabled=true;status.className='email-status';status.textContent='Отправляем…';try{var response=await fetch('/api/cats/${encodeURIComponent(cat.id)}/memo-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:input.value})});var result=await response.json();if(!response.ok)throw new Error(result.error||'Не удалось отправить письмо');status.textContent=result.message||'Письмо отправлено.';}catch(error){status.className='email-status error';status.textContent=error instanceof Error?error.message:'Не удалось отправить письмо';}finally{button.disabled=false;}});
+      </script></body></html>`);
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/cats/:id/memo-email', requireAdmin, async (req, res, next) => {
+    try {
+      const email = validate(emailSchema, req.body?.email);
+      const cat = (await getAllCats()).find((candidate) => candidate.id === req.params.id);
+      if (!cat) return res.status(404).json({ error: 'Котик не найден' });
+      const registrationUrl = catRegistrationUrl(cat.id);
+      await sendTransactionalEmail(
+        email,
+        `Памятка нового хозяина — ${cat.name}`,
+        `Памятка нового хозяина\n\nКотик: ${cat.name}\n\nПерейдите по защищённой ссылке, чтобы войти или зарегистрироваться и привязать котика к личному кабинету:\n${registrationUrl}\n\nЕсли у вас уже есть аккаунт владельца, выберите вход. Если аккаунта ещё нет, зарегистрируйтесь и подтвердите e-mail.\n\nПароль должен быть не короче 8 символов и содержать строчные и заглавные латинские буквы и цифры, без специальных символов. Если письма подтверждения нет, проверьте папку «Спам».`,
+      );
+      res.json({ success: true, message: `Памятка отправлена на ${email}` });
+    } catch (error) { next(error); }
   });
 
   app.get('/api/preferences', async (req: ShelterRequest, res, next) => {
@@ -686,7 +827,68 @@ async function startServer() {
     } catch (error) { next(error); }
   });
 
-  app.get('/api/admin/session', requireAdmin, (_req, res) => res.json({ authenticated: true }));
+  app.post('/api/auth/register', async (req, res, next) => {
+    try {
+      const input = validate(z.object({
+        email: emailSchema,
+        password: passwordSchema,
+        passwordConfirm: z.string(),
+        displayName: z.string().trim().max(120).optional(),
+        catId: z.string().trim().min(1).max(200).optional(),
+        invite: z.string().trim().min(1).max(200).optional(),
+      }), req.body);
+      if (input.password !== input.passwordConfirm) return res.status(400).json({ error: 'Пароли не совпадают' });
+      const invitedCat = await resolveInvitedCat(input.catId, input.invite);
+      const registration = await registerOwner(input.email, input.password, input.displayName, invitedCat?.id);
+      const verifyUrl = `${PUBLIC_ORIGIN}/?verify=${encodeURIComponent(registration.token)}`;
+      await sendTransactionalEmail(
+        registration.user.email,
+        'Подтвердите регистрацию в «Доброта для кота»',
+        `Для подтверждения регистрации перейдите по ссылке: ${verifyUrl}\n\nЕсли вы не создавали аккаунт, проигнорируйте письмо.`,
+      );
+      res.status(201).json({ message: 'Письмо отправлено. Подтвердите регистрацию по ссылке из письма. Если письма нет, проверьте папку «Спам».' });
+    } catch (error) { next(error); }
+  });
+  app.post('/api/auth/resend-verification', async (req, res, next) => {
+    try {
+      const email = validate(emailSchema, req.body?.email);
+      const token = await resendVerification(email);
+      if (token) {
+        const verifyUrl = `${PUBLIC_ORIGIN}/?verify=${encodeURIComponent(token)}`;
+        await sendTransactionalEmail(email, 'Новая ссылка подтверждения регистрации', `Подтвердите регистрацию: ${verifyUrl}`);
+      }
+      res.json({ message: 'Если регистрация ожидает подтверждения, новое письмо отправлено. Проверьте также папку «Спам».' });
+    } catch (error) { next(error); }
+  });
+  app.post('/api/auth/verify', async (req, res, next) => {
+    try {
+      const token = validate(z.string().min(32).max(200), req.body?.token);
+      const user = await verifyRegistration(token);
+      if (!user) return res.status(400).json({ error: 'Ссылка недействительна или срок её действия истёк' });
+      res.json({ message: 'Регистрация подтверждена. Теперь вы можете войти.', user });
+    } catch (error) { next(error); }
+  });
+  app.post('/api/auth/request-password-reset', async (req, res, next) => {
+    try {
+      const email = validate(emailSchema, req.body?.email);
+      const token = await createPasswordReset(email);
+      if (token) {
+        const resetUrl = `${PUBLIC_ORIGIN}/?reset=${encodeURIComponent(token)}`;
+        await sendTransactionalEmail(email, 'Восстановление пароля', `Задайте новый пароль по ссылке: ${resetUrl}`);
+      }
+      res.json({ message: 'Если аккаунт существует, письмо для восстановления пароля отправлено.' });
+    } catch (error) { next(error); }
+  });
+  app.post('/api/auth/reset-password', async (req, res, next) => {
+    try {
+      const input = validate(z.object({ token: z.string().min(32).max(200), password: passwordSchema, passwordConfirm: z.string() }), req.body);
+      if (input.password !== input.passwordConfirm) return res.status(400).json({ error: 'Пароли не совпадают' });
+      if (!(await resetPassword(input.token, input.password))) return res.status(400).json({ error: 'Ссылка недействительна или срок её действия истёк' });
+      res.json({ message: 'Пароль изменён. Войдите с новым паролем.' });
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/admin/session', optionalUser, (req: ShelterRequest, res) => res.json({ authenticated: Boolean(req.user), user: req.user }));
   app.get('/api/admin/cat-ratings', requireAdmin, async (_req, res, next) => {
     try { res.json(await getCatRatings()); } catch (error) { next(error); }
   });
@@ -700,60 +902,270 @@ async function startServer() {
     try {
       const ip = req.ip || 'unknown';
       const now = Date.now();
-      const state = loginAttempts.get(ip);
+      const input = validate(z.object({
+        email: emailSchema,
+        password: z.string().min(1).max(200),
+        catId: z.string().trim().min(1).max(200).optional(),
+        invite: z.string().trim().min(1).max(200).optional(),
+      }), req.body);
+      const { email, password } = input;
+      const invitedCat = await resolveInvitedCat(input.catId, input.invite);
+      const attemptKey = `${ip}:${email.toLocaleLowerCase('en-US')}`;
+      const state = loginAttempts.get(attemptKey);
       if (state && state.resetAt > now && state.count >= 5) return res.status(429).json({ error: 'Too many login attempts' });
-      const password = validate(z.string().min(1).max(200), req.body?.password);
-      if (!(await verifyAdminPassword(password))) {
+      const auth = await authenticateUser(email, password);
+      if (auth.needsVerification) {
+        if (invitedCat) await setPendingUserCat(email, invitedCat.id);
+        return res.status(403).json({ authenticated: false, needsVerification: true, error: 'Подтвердите регистрацию по ссылке из письма.' });
+      }
+      if (!auth.user) {
         const current = state && state.resetAt > now ? state : { count: 0, resetAt: now + 15 * 60 * 1000 };
         current.count += 1;
-        loginAttempts.set(ip, current);
-        return res.status(401).json({ authenticated: false });
+        loginAttempts.set(attemptKey, current);
+        return res.status(401).json({ authenticated: false, error: 'Неверное имя пользователя или пароль' });
       }
-      loginAttempts.delete(ip);
+      loginAttempts.delete(attemptKey);
+      let user = auth.user;
+      if (invitedCat) {
+        if (user.role !== 'owner') return res.status(400).json({ authenticated: false, error: 'Котика можно привязать только к аккаунту владельца' });
+        user = await attachUserCat(user.email, invitedCat.id);
+      }
       const token = crypto.randomBytes(32).toString('hex');
-      await createAdminSession(tokenHash(token), new Date(now + SESSION_MS));
+      await createUserSession(tokenHash(token), user.email, new Date(now + SESSION_MS));
       setCookie(res, ADMIN_COOKIE, token, SESSION_MS);
-      res.json({ authenticated: true });
+      res.json({ authenticated: true, user });
     } catch (error) { next(error); }
   });
   app.post('/api/admin/logout', async (req: ShelterRequest, res, next) => {
     try {
       const token = parseCookies(req)[ADMIN_COOKIE];
-      if (token) await deleteAdminSession(tokenHash(token));
+      if (token) await deleteUserSession(tokenHash(token));
       clearCookie(res, ADMIN_COOKIE);
       res.json({ success: true });
     } catch (error) { next(error); }
   });
-  app.post('/api/admin/password', requireAdmin, async (req, res, next) => {
+  app.post('/api/admin/password', requireUser, async (req: ShelterRequest, res, next) => {
     try {
       const oldPassword = validate(z.string().min(1).max(200), req.body?.oldPassword);
       const newPassword = validate(passwordSchema, req.body?.newPassword);
-      const result = await changeAdminPassword(oldPassword, newPassword);
+      const result = await changeUserPassword(req.user!.email, oldPassword, newPassword);
       if (!result.success) return res.status(400).json(result);
       clearCookie(res, ADMIN_COOKIE);
       res.json(result);
     } catch (error) { next(error); }
   });
+  app.patch('/api/account', requireUser, async (req: ShelterRequest, res, next) => {
+    try {
+      const displayName = validate(z.string().trim().max(120), req.body?.displayName);
+      res.json(await updateUserProfile(req.user!.email, displayName));
+    } catch (error) { next(error); }
+  });
+  app.post('/api/account/accept-cat-invite', requireUser, requireRole('owner'), async (req: ShelterRequest, res, next) => {
+    try {
+      const input = validate(z.object({ catId: z.string().trim().min(1).max(200), invite: z.string().trim().min(1).max(200) }), req.body);
+      const cat = await resolveInvitedCat(input.catId, input.invite);
+      res.json(await attachUserCat(req.user!.email, cat!.id));
+    } catch (error) { next(error); }
+  });
 
-  app.get('/api/database/stats', requireAdmin, async (_req, res, next) => {
+  app.get('/api/users', requireAdmin, async (req: ShelterRequest, res, next) => {
+    try { res.json(await listUsers(req.user!.role)); } catch (error) { next(error); }
+  });
+  app.post('/api/users/staff', requireAdmin, requireRole('administrator'), async (req, res, next) => {
+    try {
+      const input = validate(z.object({
+        email: emailSchema,
+        password: passwordSchema,
+        displayName: z.string().trim().max(120),
+        role: z.enum(['administrator', 'curator']),
+      }), req.body);
+      res.status(201).json(await createStaffUser(input.email, input.password, input.displayName, input.role));
+    } catch (error) { next(error); }
+  });
+  app.patch('/api/users/:email', requireAdmin, requireRole('administrator'), async (req, res, next) => {
+    try {
+      const input = validate(z.object({
+        displayName: z.string().trim().max(120),
+        role: z.enum(['administrator', 'curator', 'owner']),
+      }), req.body);
+      const user = await updateManagedUser(req.params.email, input.displayName, input.role);
+      if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+      res.json(user);
+    } catch (error) { next(error); }
+  });
+  app.put('/api/users/:email/cats', requireAdmin, async (req, res, next) => {
+    try {
+      const catIds = validate(z.array(z.string().min(1).max(200)).max(100), req.body?.catIds);
+      const user = await assignUserCats(req.params.email, catIds);
+      if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+      res.json(user);
+    } catch (error) { next(error); }
+  });
+  app.delete('/api/users/:email', requireAdmin, async (req: ShelterRequest, res, next) => {
+    try {
+      const success = await deleteManagedUser(req.params.email, req.user!.role);
+      if (!success) return res.status(400).json({ error: 'Этого пользователя нельзя удалить' });
+      res.json({ success });
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/account/cats', requireUser, requireRole('owner'), async (req: ShelterRequest, res, next) => {
+    try { res.json(await getCatsForOwner(req.user!.email)); } catch (error) { next(error); }
+  });
+  app.get('/owner-video-capture', (req, res) => {
+    const catId = typeof req.query.catId === 'string' ? req.query.catId : '';
+    res.redirect(302, `/owner-media-capture?catId=${encodeURIComponent(catId)}&kind=video`);
+  });
+  app.get('/owner-media-capture', requireUser, requireRole('owner'), async (req: ShelterRequest, res, next) => {
+    try {
+      const catId = validate(z.string().min(1).max(200), req.query.catId);
+      const kind = validate(z.enum(['photo', 'video']), req.query.kind);
+      const cat = (await getCatsForOwner(req.user!.email)).find((candidate) => candidate.id === catId);
+      if (!cat) return res.status(404).type('text/plain').send('Котик не найден или не привязан к вашему аккаунту');
+      if (cat.status !== 'adopted') return res.status(400).type('text/plain').send('Фото и видео можно добавлять после завершения испытательного срока');
+      const isPhoto = kind === 'photo';
+      const mediaLabel = isPhoto ? 'Фото' : 'Видео';
+      const actionLabel = isPhoto ? 'Сделать фото' : 'Записать видео';
+      const returnUrl = `/?cabinet=1&ownerCat=${encodeURIComponent(cat.id)}&ownerMedia=${kind}`;
+      res
+        .set('Cache-Control', 'no-store')
+        .type('html')
+        .send(`<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${mediaLabel} для ${escapeHtml(cat.name)}</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#fafaf9;color:#1c1917;font:16px system-ui,-apple-system,sans-serif}.page{min-height:100dvh;display:flex;flex-direction:column}.head{padding:18px 20px;background:#1c1917;color:#fff;font-weight:800;font-size:18px}.main{width:min(100%,520px);margin:auto;padding:28px 20px;text-align:center}.icon{width:72px;height:72px;margin:0 auto 18px;border-radius:24px;background:#f59e0b;color:#fff;display:grid;place-items:center;font-size:32px}h1{font-size:25px;margin:0 0 10px}p{color:#78716c;line-height:1.5;margin:0 0 24px}.button,.back{width:100%;min-height:56px;border:0;border-radius:16px;font:800 16px system-ui;display:flex;align-items:center;justify-content:center;text-decoration:none}.button{background:#f59e0b;color:#fff}.button.secondary{background:#292524}.button:disabled{opacity:.55}.back{margin-top:12px;background:#fff;color:#44403c;border:1px solid #d6d3d1}.preview{display:none;margin:20px 0;padding:10px;border:1px solid #e7e5e4;border-radius:20px;background:#fff}.preview img,.preview video{display:none;width:100%;max-height:52dvh;object-fit:contain;border-radius:14px;background:#1c1917}.confirm{display:none;gap:10px}.confirm .button{flex:1}.status{min-height:48px;margin-top:18px;padding:12px;border-radius:14px;font-size:14px;line-height:1.45}.status:empty{padding:0}.status.error{background:#fff1f2;color:#be123c}.status.ok{background:#ecfdf5;color:#047857}.note{font-size:12px;margin-top:18px}</style></head>
+<body><div class="page"><header class="head">Панель управления</header><main class="main"><div class="icon">${isPhoto ? '📷' : '●'}</div><h1>${mediaLabel} для ${escapeHtml(cat.name)}</h1><p>После системной кнопки OK проверьте результат. Материал попадёт на модерацию только после нажатия «Отправить».</p><input id="capture" type="file" accept="${isPhoto ? 'image/*' : 'video/*'}" capture="environment" hidden><button id="start" class="button" type="button">${actionLabel}</button><div id="preview" class="preview"><img id="photo-preview" alt="Предварительный просмотр"><video id="video-preview" controls playsinline></video></div><div id="confirm" class="confirm"><button id="retake" class="button secondary" type="button">Переснять</button><button id="send" class="button" type="button">Отправить</button></div><a id="back" class="back" href="${returnUrl}">Вернуться без отправки</a><div id="status" class="status" role="status"></div><p class="note">${isPhoto ? 'Фото — до 25 МБ.' : 'Видео — до 25 МБ и до 60 секунд.'} Не закрывайте этот экран во время отправки.</p></main></div>
+<script>
+const kind='${kind}',input=document.getElementById('capture'),button=document.getElementById('start'),status=document.getElementById('status'),preview=document.getElementById('preview'),photoPreview=document.getElementById('photo-preview'),videoPreview=document.getElementById('video-preview'),confirmBox=document.getElementById('confirm'),send=document.getElementById('send'),retake=document.getElementById('retake'),back=document.getElementById('back');let selectedFile=null,objectUrl='';
+const show=(text,type='')=>{status.textContent=text;status.className='status '+type};
+const duration=file=>new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),video=document.createElement('video');video.preload='metadata';video.onloadedmetadata=()=>{URL.revokeObjectURL(url);resolve(video.duration)};video.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Не удалось прочитать видео'))};video.src=url});
+button.addEventListener('click',()=>input.click());
+const clearPreview=()=>{if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl='';selectedFile=null;photoPreview.removeAttribute('src');videoPreview.removeAttribute('src');videoPreview.load();preview.style.display='none';photoPreview.style.display='none';videoPreview.style.display='none';confirmBox.style.display='none';button.style.display='flex';back.style.display='flex';input.value='';show('')};
+input.addEventListener('change',async()=>{const file=input.files&&input.files[0];if(!file)return;const expected=kind==='photo'?'image/':'video/';if(!file.type.startsWith(expected)){show(kind==='photo'?'Выбранный файл не является фотографией.':'Выбранный файл не является видео.','error');input.value='';return}if(file.size>25*1024*1024){show((kind==='photo'?'Фото':'Видео')+' больше 25 МБ.','error');input.value='';return}try{if(kind==='video'){const seconds=await duration(file);if(!Number.isFinite(seconds)||seconds>60)throw new Error('Длительность видео не должна превышать 60 секунд.')}selectedFile=file;if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=URL.createObjectURL(file);if(kind==='photo'){photoPreview.src=objectUrl;photoPreview.style.display='block'}else{videoPreview.src=objectUrl;videoPreview.style.display='block'}preview.style.display='block';confirmBox.style.display='flex';button.style.display='none';back.style.display='none';show('Проверьте результат и подтвердите отправку.','ok')}catch(error){show(error instanceof Error?error.message:'Не удалось прочитать файл','error');input.value=''}});
+retake.addEventListener('click',()=>{clearPreview();input.click()});
+send.addEventListener('click',async()=>{if(!selectedFile)return;send.disabled=true;retake.disabled=true;show('Отправляем материал…','ok');try{const response=await fetch('/api/owner-content/media-capture?catId=${encodeURIComponent(cat.id)}&kind='+kind,{method:'POST',headers:{'Content-Type':selectedFile.type||(kind==='photo'?'image/jpeg':'video/mp4')},body:selectedFile});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'Не удалось отправить материал');show('Материал отправлен. Возвращаемся в панель…','ok');window.location.replace('${returnUrl}&ownerCapture=success&ownerContent='+encodeURIComponent(result.id))}catch(error){show(error instanceof Error?error.message:'Не удалось отправить материал','error');send.disabled=false;retake.disabled=false}});
+</script></body></html>`);
+    } catch (error) { next(error); }
+  });
+  app.post('/api/owner-content/media-capture', requireUser, requireRole('owner'), express.raw({ type: ['image/*', 'video/*'], limit: '25mb' }), async (req: ShelterRequest, res, next) => {
+    try {
+      const catId = validate(z.string().min(1).max(200), req.query.catId);
+      const kind = validate(z.enum(['photo', 'video']), req.query.kind);
+      const mimeType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+      const supportedTypes = kind === 'photo'
+        ? new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+        : new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp']);
+      if (!supportedTypes.has(mimeType)) return res.status(400).json({ error: `Формат ${kind === 'photo' ? 'фотографии' : 'видео'} не поддерживается` });
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'Медиафайл не получен' });
+      const normalizedMedia = kind === 'video'
+        ? await ensureBrowserCompatibleVideo(req.body, mimeType)
+        : { content: req.body, mimeType };
+      const mediaUrl = `data:${normalizedMedia.mimeType};base64,${normalizedMedia.content.toString('base64')}`;
+      const content = await createOwnerContent(req.user!.email, { catId, kind, mediaUrl });
+      const staff = (await listUsers('administrator')).filter((user) => user.role !== 'owner');
+      await Promise.allSettled(staff.map((user) => sendTransactionalEmail(
+        user.email,
+        `Новое ${kind === 'photo' ? 'фото' : 'видео'} владельца котика`,
+        `${req.user!.displayName} добавил(а) материал, требующий проверки: ${PUBLIC_ORIGIN}/?cabinet=1&content=${encodeURIComponent(content.id)}`,
+      )));
+      res.status(201).json(content);
+    } catch (error) { next(error); }
+  });
+  app.get('/api/cats/:id/owner-content', optionalUser, async (req: ShelterRequest, res, next) => {
+    try {
+      const staff = Boolean(req.user && ['administrator', 'curator'].includes(req.user.role));
+      res.json(await getOwnerContentForCat(req.params.id, req.user?.email, staff));
+    } catch (error) { next(error); }
+  });
+  app.get('/api/owner-content/pending', requireAdmin, async (_req, res, next) => {
+    try { res.json(await getPendingOwnerContent()); } catch (error) { next(error); }
+  });
+  app.post('/api/owner-content', requireUser, requireRole('owner'), async (req: ShelterRequest, res, next) => {
+    try {
+      const input = validate(z.object({
+        catId: z.string().min(1).max(200),
+        kind: z.enum(['photo', 'video', 'comment', 'question']),
+        text: z.string().max(5000).optional(),
+        mediaUrl: z.string().max(14000000).optional(),
+        isConfidential: z.boolean().optional(),
+      }), req.body);
+      if (['photo', 'video'].includes(input.kind) && !input.mediaUrl) return res.status(400).json({ error: 'Добавьте файл' });
+      if (['comment', 'question'].includes(input.kind) && !input.text?.trim()) return res.status(400).json({ error: 'Введите текст' });
+      const content = await createOwnerContent(req.user!.email, input);
+      const staff = (await listUsers('administrator')).filter((user) => user.role !== 'owner');
+      await Promise.allSettled(staff.map((user) => sendTransactionalEmail(
+        user.email,
+        'Новое действие владельца котика',
+        `${req.user!.displayName} добавил(а) материал, требующий реакции: ${PUBLIC_ORIGIN}/?cabinet=1&content=${encodeURIComponent(content.id)}`,
+      )));
+      res.status(201).json(content);
+    } catch (error) { next(error); }
+  });
+  app.post('/api/owner-content/media-batch', requireUser, requireRole('owner'), async (req: ShelterRequest, res, next) => {
+    try {
+      const input = validate(z.object({
+        catId: z.string().min(1).max(200),
+        kind: z.enum(['photo', 'video']),
+        mediaUrls: z.array(z.string().min(1).max(14000000)).min(1).max(5),
+      }), req.body);
+      const contents: OwnerContent[] = [];
+      for (const mediaUrl of input.mediaUrls) {
+        contents.push(await createOwnerContent(req.user!.email, { catId: input.catId, kind: input.kind, mediaUrl }));
+      }
+      const staff = (await listUsers('administrator')).filter((user) => user.role !== 'owner');
+      await Promise.allSettled(staff.map((user) => sendTransactionalEmail(
+        user.email,
+        'Новые материалы владельца котика',
+        `${req.user!.displayName} добавил(а) ${contents.length} файл(а), требующих проверки: ${PUBLIC_ORIGIN}/?cabinet=1&content=${encodeURIComponent(contents[0].id)}`,
+      )));
+      res.status(201).json(contents);
+    } catch (error) { next(error); }
+  });
+  app.patch('/api/owner-content/:id', requireUser, requireRole('owner'), async (req: ShelterRequest, res, next) => {
+    try {
+      const text = validate(z.string().trim().min(1).max(5000), req.body?.text);
+      const content = await updateOwnerContent(req.user!.email, req.params.id, text);
+      if (!content) return res.status(404).json({ error: 'Материал не найден или недоступен для редактирования' });
+      res.json(content);
+    } catch (error) { next(error); }
+  });
+  app.delete('/api/owner-content/:id', requireUser, requireRole('owner'), async (req: ShelterRequest, res, next) => {
+    try { res.json({ success: await deleteOwnerContent(req.user!.email, req.params.id) }); } catch (error) { next(error); }
+  });
+  app.patch('/api/owner-content/:id/moderate', requireAdmin, async (req: ShelterRequest, res, next) => {
+    try {
+      const input = validate(z.object({ status: z.enum(['pending', 'approved', 'rejected']), answer: z.string().max(5000).optional() }), req.body);
+      const content = await moderateOwnerContent(req.params.id, input.status, input.answer, req.user!.email);
+      if (!content) return res.status(404).json({ error: 'Материал не найден' });
+      if (content.authorEmail) {
+        await sendTransactionalEmail(
+          content.authorEmail,
+          content.kind === 'question' && input.answer ? 'На ваш вопрос ответили' : 'Материал прошёл модерацию',
+          `Откройте панель управления: ${PUBLIC_ORIGIN}/?cabinet=1&content=${encodeURIComponent(content.id)}`,
+        );
+      }
+      res.json(content);
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/database/stats', requireAdmin, requireRole('administrator'), async (_req, res, next) => {
     try { res.json(await getDatabaseStats()); } catch (error) { next(error); }
   });
-  app.get('/api/database/backup-schedule', requireAdmin, async (_req, res, next) => {
+  app.get('/api/database/backup-schedule', requireAdmin, requireRole('administrator'), async (_req, res, next) => {
     try { res.json(await getAutomaticBackupStatus()); } catch (error) { next(error); }
   });
-  app.get('/api/database/backup-directories', requireAdmin, async (req, res, next) => {
+  app.get('/api/database/backup-directories', requireAdmin, requireRole('administrator'), async (req, res, next) => {
     try {
       const requestedPath = typeof req.query.path === 'string' ? req.query.path : undefined;
       res.json(await browseServerDirectories(requestedPath));
     } catch (error) { next(error); }
   });
-  app.post('/api/database/backup-directories', requireAdmin, async (req, res, next) => {
+  app.post('/api/database/backup-directories', requireAdmin, requireRole('administrator'), async (req, res, next) => {
     try {
       const input = validate(createBackupDirectorySchema, req.body);
       res.status(201).json(await createServerDirectory(input.parentPath, input.name));
     } catch (error) { next(error); }
   });
-  app.put('/api/database/backup-schedule', requireAdmin, async (req, res, next) => {
+  app.put('/api/database/backup-schedule', requireAdmin, requireRole('administrator'), async (req, res, next) => {
     try {
       const settings = validate(databaseBackupSettingsSchema, req.body);
       const directory = await assertBackupDirectoryWritable(settings.directory);
@@ -761,7 +1173,7 @@ async function startServer() {
       res.json(await reloadAutomaticBackupScheduler());
     } catch (error) { next(error); }
   });
-  app.get('/api/database/export', requireAdmin, async (_req, res, next) => {
+  app.get('/api/database/export', requireAdmin, requireRole('administrator'), async (_req, res, next) => {
     try {
       const backupPath = await createPostgresBackup();
       const date = new Date().toISOString().slice(0, 10);
@@ -772,7 +1184,7 @@ async function startServer() {
       });
     } catch (error) { next(error); }
   });
-  app.post('/api/database/import', requireAdmin, express.raw({ type: 'application/octet-stream', limit: '250mb' }), async (req: ShelterRequest, res, next) => {
+  app.post('/api/database/import', requireAdmin, requireRole('administrator'), express.raw({ type: 'application/octet-stream', limit: '250mb' }), async (req: ShelterRequest, res, next) => {
     try {
       if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
         res.status(400).json({ success: false, error: 'Файл резервной копии пуст или не передан' });
@@ -790,8 +1202,19 @@ async function startServer() {
   });
   app.use('/api', (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const message = error instanceof Error ? error.message : 'Unexpected error';
+    const explicitStatus = error && typeof error === 'object' && 'status' in error ? Number(error.status) : 0;
+    const databaseCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+    const status = explicitStatus >= 400 && explicitStatus < 600
+      ? explicitStatus
+      : databaseCode === '23505'
+        ? 409
+        : databaseCode === '23503' || databaseCode === '23514'
+          ? 400
+          : message.includes('required') || message.includes('Expected')
+            ? 400
+            : 500;
     console.error('[API]', message);
-    res.status(message.includes('required') || message.includes('Expected') ? 400 : 500).json({ error: message });
+    res.status(status).json({ error: message });
   });
 
   if (!isProduction) {

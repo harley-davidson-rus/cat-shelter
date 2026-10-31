@@ -29,6 +29,7 @@ let lastRunAt: string | null = null;
 let lastSuccessAt: string | null = null;
 let lastFileName: string | null = null;
 let lastError: string | null = null;
+const automaticBackupsDisabled = process.env.DISABLE_AUTOMATIC_BACKUPS === 'true';
 
 function nextOccurrence(time: string): Date {
   const [hours, minutes] = time.split(':').map(Number);
@@ -49,6 +50,7 @@ function scheduleNextRun(): void {
 }
 
 export async function runScheduledDatabaseBackup(): Promise<void> {
+  if (automaticBackupsDisabled) return;
   if (isRunning) return;
   isRunning = true;
   nextRunAt = null;
@@ -69,6 +71,12 @@ export async function runScheduledDatabaseBackup(): Promise<void> {
 
 export async function reloadAutomaticBackupScheduler(): Promise<DatabaseBackupScheduleStatus> {
   currentSettings = await getDatabaseBackupSettings();
+  if (automaticBackupsDisabled) {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    nextRunAt = null;
+    return getAutomaticBackupStatus();
+  }
   await pruneScheduledPostgresBackups(currentSettings.retentionCount, currentSettings.directory);
   scheduleNextRun();
   return getAutomaticBackupStatus();
@@ -91,6 +99,11 @@ export async function getAutomaticBackupStatus(): Promise<DatabaseBackupSchedule
 }
 
 export async function startAutomaticBackupScheduler(): Promise<void> {
+  if (automaticBackupsDisabled) {
+    currentSettings = await getDatabaseBackupSettings();
+    console.log('[Backup] Automatic PostgreSQL backups are disabled for this process');
+    return;
+  }
   const status = await reloadAutomaticBackupScheduler();
   console.log(`[Backup] Daily PostgreSQL backup scheduled for ${status.time} (${status.timeZone}), keeping ${status.retentionCount} archives`);
 }

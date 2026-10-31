@@ -20,6 +20,7 @@ const MIME_EXTENSIONS: Record<string, string> = {
   'video/mp4': 'mp4',
   'video/webm': 'webm',
   'video/quicktime': 'mov',
+  'video/3gpp': '3gp',
 };
 
 const EXTENSION_MIMES: Record<string, string> = Object.fromEntries(

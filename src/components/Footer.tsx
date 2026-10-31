@@ -96,7 +96,7 @@ export const Footer: React.FC<FooterProps> = ({ contacts, shelterStats, onOpenAd
                     className="hover:text-amber-400 text-stone-400 transition-colors flex items-center gap-1.5 cursor-pointer text-left"
                   >
                     <Lock className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Вход для куратора (панель)</span>
+                    <span>Личный кабинет</span>
                   </button>
                 </li>
               )}

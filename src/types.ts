@@ -4,6 +4,41 @@ export type CatStatus = 'available' | 'reserved' | 'trial' | 'adopted';
 export type CatSize = 'small' | 'medium' | 'large';
 export type CatTemperament = 'cuddly' | 'playful' | 'calm' | 'independent' | 'curious';
 
+export type UserRole = 'administrator' | 'curator' | 'owner';
+
+export interface UserAccount {
+  email: string;
+  displayName: string;
+  role: UserRole;
+  isVerified: boolean;
+  createdAt: string;
+  catIds: string[];
+}
+
+export type OwnerContentKind = 'photo' | 'video' | 'comment' | 'question';
+export type ModerationStatus = 'pending' | 'approved' | 'rejected';
+
+export interface OwnerContent {
+  id: string;
+  catId: string;
+  authorEmail?: string;
+  authorDisplayName: string;
+  kind: OwnerContentKind;
+  text: string;
+  mediaUrl?: string;
+  isConfidential: boolean;
+  answer?: string;
+  answeredBy?: string;
+  moderationStatus: ModerationStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthSession {
+  authenticated: boolean;
+  user?: UserAccount;
+}
+
 export interface CatHealth {
   vaccinated: boolean;
   sterilized: boolean;

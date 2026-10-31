@@ -9,7 +9,7 @@ import { ShelterAboutSection } from './components/ShelterAboutSection';
 import { Footer } from './components/Footer';
 import { SHELTER_INFO } from './data/cats';
 import { INITIAL_ARTICLES } from './data/news';
-import { Cat, AdoptionApplication, FilterOptions, ApplicationStatus, ShelterArticle, ShelterStats, SiteContacts, DonationSettings } from './types';
+import { Cat, AdoptionApplication, FilterOptions, ApplicationStatus, ShelterArticle, ShelterStats, SiteContacts, DonationSettings, OwnerContentKind } from './types';
 import { Sparkles, Heart, Search, Check, AlertCircle, Plus, Download, Upload, ArrowUp } from 'lucide-react';
 import { cleanupOldStorageKeys } from './utils/storage';
 import {
@@ -173,8 +173,42 @@ export default function App() {
   const [isAdoptionModalOpen, setIsAdoptionModalOpen] = useState(false);
   const [isMyApplicationsModalOpen, setIsMyApplicationsModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [initialOwnerDashboardCatId, setInitialOwnerDashboardCatId] = useState<string | null>(() => new URLSearchParams(window.location.search).get('ownerCat'));
+  const [initialOwnerContentKind, setInitialOwnerContentKind] = useState<Extract<OwnerContentKind, 'photo' | 'video'> | null>(() => {
+    const value = new URLSearchParams(window.location.search).get('ownerMedia');
+    return value === 'photo' || value === 'video' ? value : null;
+  });
   const [isFavoritesModalOpen, setIsFavoritesModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('verify') || params.has('reset') || params.has('register') || params.has('cabinet')) setIsAdminModalOpen(true);
+  }, []);
+
+  const openAdminDashboard = (ownerCatId?: string, ownerMedia?: 'photo' | 'video') => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('cabinet', '1');
+    if (ownerCatId) url.searchParams.set('ownerCat', ownerCatId);
+    else url.searchParams.delete('ownerCat');
+    if (ownerMedia) url.searchParams.set('ownerMedia', ownerMedia);
+    else url.searchParams.delete('ownerMedia');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    setInitialOwnerDashboardCatId(ownerCatId || null);
+    setInitialOwnerContentKind(ownerMedia || null);
+    setIsAdminModalOpen(true);
+  };
+
+  const closeAdminDashboard = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('cabinet');
+    url.searchParams.delete('ownerCat');
+    url.searchParams.delete('ownerMedia');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    setIsAdminModalOpen(false);
+    setInitialOwnerDashboardCatId(null);
+    setInitialOwnerContentKind(null);
+  };
 
   const openCatDetail = (cat: Cat, updateHistory = true) => {
     const targetPath = catSeoPath(cat, cats);
@@ -773,6 +807,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-stone-50/40 text-stone-800">
+      {!isAdminModalOpen && <>
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-20 right-4 sm:right-6 z-50 bg-stone-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-stone-700 flex items-center gap-2.5 text-xs sm:text-sm font-semibold animate-in slide-in-from-bottom-5">
@@ -798,7 +833,7 @@ export default function App() {
         onOpenFavorites={() => setIsFavoritesModalOpen(true)}
         onOpenMyApplications={() => setIsMyApplicationsModalOpen(true)}
         onOpenHelpModal={() => setIsHelpModalOpen(true)}
-        onOpenAdminDashboard={() => setIsAdminModalOpen(true)}
+        onOpenAdminDashboard={() => openAdminDashboard()}
       />
 
       {/* Hero Welcome Banner */}
@@ -915,7 +950,8 @@ export default function App() {
       <ShelterAboutSection contacts={siteContacts} />
 
       {/* Footer */}
-      <Footer contacts={siteContacts} shelterStats={shelterStats} onOpenAdminDashboard={() => setIsAdminModalOpen(true)} />
+      <Footer contacts={siteContacts} shelterStats={shelterStats} onOpenAdminDashboard={() => openAdminDashboard()} />
+      </>}
 
       {/* --- MODALS --- */}
 
@@ -927,6 +963,10 @@ export default function App() {
         onClose={closeCatDetail}
         onToggleFavorite={handleToggleFavorite}
         onApplyForAdoption={(cat) => handleOpenAdoptionForCat(cat)}
+        onOpenOwnerDashboard={(catId) => {
+          closeCatDetail();
+          openAdminDashboard(catId);
+        }}
         shareUrl={'https://kind4cat.ru' + catSeoPath(selectedCatForDetail, cats)}
       />}
 
@@ -995,7 +1035,9 @@ export default function App() {
       {/* Shelter Coordinator Protected Admin Management Dashboard Modal */}
       {isAdminModalOpen && <AdminDashboard
         isOpen={isAdminModalOpen}
-        onClose={() => setIsAdminModalOpen(false)}
+        onClose={closeAdminDashboard}
+        initialOwnerCatId={initialOwnerDashboardCatId}
+        initialOwnerContentKind={initialOwnerContentKind}
         cats={cats}
         newlyAddedCatId={newlyAddedCatId}
         onNewCatPositioned={() => setNewlyAddedCatId(null)}

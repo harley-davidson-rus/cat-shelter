@@ -42,13 +42,19 @@ import {
   Menu,
   ChevronDown,
 } from 'lucide-react';
-import { Cat, AdoptionApplication, ApplicationStatus, ShelterArticle, ShelterStats, SiteContacts } from '../types';
+import { Cat, AdoptionApplication, ApplicationStatus, ShelterArticle, ShelterStats, SiteContacts, UserAccount, OwnerContentKind } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 import {
-  apiVerifyAdminPassword,
+  apiLogin,
   apiGetAdminSession,
   apiLogoutAdmin,
   apiChangeAdminPassword,
+  apiRegisterOwner,
+  apiRequestPasswordReset,
+  apiResetPassword,
+  apiResendVerification,
+  apiVerifyRegistration,
+  apiAcceptCatInvite,
   apiGetDatabaseStats,
   apiGetDatabaseBackupSchedule,
   apiUpdateDatabaseBackupSchedule,
@@ -62,10 +68,14 @@ import {
   CatRating,
   VisitAnalytics,
 } from '../utils/api';
+import { OwnerDashboard } from './OwnerDashboard';
+import { UsersManagement } from './UsersManagement';
 
 interface AdminDashboardProps {
   isOpen: boolean;
   onClose: () => void;
+  initialOwnerCatId?: string | null;
+  initialOwnerContentKind?: Extract<OwnerContentKind, 'photo' | 'video'> | null;
   // Cats data & actions
   cats: Cat[];
   newlyAddedCatId?: string | null;
@@ -98,7 +108,7 @@ interface AdminDashboardProps {
   onAuthenticated: () => Promise<void> | void;
 }
 
-type AdminTabId = 'applications' | 'cats' | 'articles' | 'stats' | 'contacts' | 'analytics' | 'database';
+type AdminTabId = 'applications' | 'cats' | 'articles' | 'users' | 'stats' | 'contacts' | 'analytics' | 'database';
 
 const creationTimestamp = (createdAt?: string): number => {
   const timestamp = createdAt ? Date.parse(createdAt) : Number.NaN;
@@ -144,6 +154,8 @@ const STATUS_CONFIG: Record<
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isOpen,
   onClose,
+  initialOwnerCatId,
+  initialOwnerContentKind,
   cats,
   newlyAddedCatId,
   onNewCatPositioned,
@@ -172,11 +184,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAuthenticated,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(false);
 
+  const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const passwordInputRef = React.useRef<HTMLInputElement>(null);
   const [loginError, setLoginError] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [authMode, setAuthMode] = useState<'choice' | 'login' | 'register' | 'forgot' | 'reset'>('login');
+  const [displayNameInput, setDisplayNameInput] = useState('');
+  const [passwordConfirmInput, setPasswordConfirmInput] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [inviteCatId, setInviteCatId] = useState('');
+  const [inviteSignature, setInviteSignature] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTabId>('applications');
   const [isMobileTabMenuOpen, setIsMobileTabMenuOpen] = useState(false);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
@@ -198,8 +219,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isCreatingDirectory, setIsCreatingDirectory] = useState(false);
 
   React.useEffect(() => {
-    const handleSessionExpired = () => setIsAuthenticated(false);
-    const handleSessionAuthenticated = () => setIsAuthenticated(true);
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscrollBehavior = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+    };
+  }, [isOpen]);
+
+  React.useEffect(() => {
+    const handleSessionExpired = () => { setIsAuthenticated(false); setCurrentUser(null); };
+    const handleSessionAuthenticated = () => {
+      apiGetAdminSession().then((session) => {
+        setIsAuthenticated(session.authenticated);
+        setCurrentUser(session.user || null);
+      });
+    };
     window.addEventListener(ADMIN_SESSION_EXPIRED_EVENT, handleSessionExpired);
     window.addEventListener(ADMIN_SESSION_AUTHENTICATED_EVENT, handleSessionAuthenticated);
     return () => {
@@ -218,15 +256,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsAuthenticated(false);
     setIsCheckingSession(true);
     apiGetAdminSession()
-      .then(async (authenticated) => {
+      .then(async (session) => {
         if (cancelled) return;
-        setIsAuthenticated(authenticated);
-        if (authenticated) await onAuthenticated();
+        let user = session.user || null;
+        const params = new URLSearchParams(window.location.search);
+        const catId = params.get('catId');
+        const invite = params.get('invite');
+        if (session.authenticated && user?.role === 'owner' && catId && invite) {
+          user = await apiAcceptCatInvite(catId, invite);
+          window.history.replaceState(null, '', window.location.pathname);
+          setAuthMessage(`Котик ${cats.find((cat) => cat.id === catId)?.name || ''} привязан к вашему аккаунту.`.trim());
+        }
+        setIsAuthenticated(session.authenticated);
+        setCurrentUser(user);
+        if (session.authenticated && user?.role !== 'owner') await onAuthenticated();
+      })
+      .catch((error) => {
+        if (!cancelled) setLoginError(error instanceof Error ? error.message : 'Не удалось открыть ссылку котика');
       })
       .finally(() => {
         if (!cancelled) setIsCheckingSession(false);
       });
     return () => { cancelled = true; };
+  }, [isOpen]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const params = new URLSearchParams(window.location.search);
+    const verifyToken = params.get('verify');
+    const passwordResetToken = params.get('reset');
+    const catId = params.get('catId') || '';
+    const invite = params.get('invite') || '';
+    setInviteCatId(catId);
+    setInviteSignature(invite);
+    if (params.has('register')) setAuthMode(catId && invite ? 'choice' : 'register');
+    if (passwordResetToken) {
+      setResetToken(passwordResetToken);
+      setAuthMode('reset');
+    }
+    if (verifyToken) {
+      setIsCheckingSession(true);
+      apiVerifyRegistration(verifyToken)
+        .then((result) => {
+          setAuthMode('login');
+          setAuthMessage(result.message);
+          window.history.replaceState(null, '', window.location.pathname);
+        })
+        .catch((error) => setLoginError(error instanceof Error ? error.message : 'Не удалось подтвердить регистрацию'))
+        .finally(() => setIsCheckingSession(false));
+    }
   }, [isOpen]);
 
   React.useEffect(() => {
@@ -247,17 +325,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   React.useEffect(() => {
     if (!isOpen || !isAuthenticated) return;
+    if (currentUser?.role === 'owner') return;
     const refreshApplications = async () => {
-      const authenticated = await apiGetAdminSession();
-      if (!authenticated) {
+      const session = await apiGetAdminSession();
+      if (!session.authenticated) {
         setIsAuthenticated(false);
+        setCurrentUser(null);
         return;
       }
       await Promise.resolve(onAuthenticated()).catch(() => {});
     };
     const intervalId = window.setInterval(refreshApplications, 5000);
     return () => window.clearInterval(intervalId);
-  }, [isOpen, isAuthenticated]);
+  }, [isOpen, isAuthenticated, currentUser?.role]);
 
   // Change password modal state
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
@@ -293,6 +373,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   React.useEffect(() => {
     setContactForm(siteContacts);
   }, [siteContacts]);
+
 
   const handleContactsSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -478,20 +559,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const authenticated = await apiVerifyAdminPassword(passwordInput);
-    if (!authenticated) {
-      setLoginError('Неверный пароль или превышено число попыток входа.');
-      return;
+    try {
+      const session = await apiLogin(emailInput, passwordInput, inviteCatId || undefined, inviteSignature || undefined);
+      if (!session.authenticated || !session.user) throw new Error('Неверное имя пользователя или пароль.');
+      setIsAuthenticated(true);
+      setCurrentUser(session.user);
+      setLoginError('');
+      setAuthMessage('');
+      setPasswordInput('');
+      if (inviteCatId) window.history.replaceState(null, '', window.location.pathname);
+      if (session.user.role !== 'owner') await onAuthenticated();
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Неверное имя пользователя или пароль.');
     }
-    setIsAuthenticated(true);
+  };
+
+  const handleRegister = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoginError('');
-    setPasswordInput('');
-    await onAuthenticated();
+    try {
+      const result = await apiRegisterOwner(emailInput, passwordInput, passwordConfirmInput, displayNameInput, inviteCatId || undefined, inviteSignature || undefined);
+      setAuthMessage(result.message);
+      setAuthMode('login');
+      setPasswordInput('');
+      setPasswordConfirmInput('');
+    } catch (error) { setLoginError(error instanceof Error ? error.message : 'Не удалось зарегистрироваться'); }
+  };
+
+  const handleForgotPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoginError('');
+    try {
+      const result = await apiRequestPasswordReset(emailInput);
+      setAuthMessage(result.message);
+      setAuthMode('login');
+    } catch (error) { setLoginError(error instanceof Error ? error.message : 'Не удалось отправить письмо'); }
+  };
+
+  const handleResetPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoginError('');
+    try {
+      const result = await apiResetPassword(resetToken, passwordInput, passwordConfirmInput);
+      setAuthMessage(result.message);
+      setAuthMode('login');
+      setPasswordInput('');
+      setPasswordConfirmInput('');
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch (error) { setLoginError(error instanceof Error ? error.message : 'Не удалось изменить пароль'); }
   };
 
   const handleLogout = async () => {
     await apiLogoutAdmin().catch(() => {});
     setIsAuthenticated(false);
+    setCurrentUser(null);
     setPasswordInput('');
   };
 
@@ -578,7 +699,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => window.cancelAnimationFrame(frameId);
   }, [activeTab, articles, isOpen, newlyAddedArticleId, onNewArticlePositioned]);
 
-  const adminTabs: ReadonlyArray<{
+  const allAdminTabs: ReadonlyArray<{
     id: AdminTabId;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
@@ -587,11 +708,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'applications', label: 'Заявки', icon: ClipboardList, count: applications.length },
     { id: 'cats', label: 'Котики', icon: CatIcon, count: cats.length },
     { id: 'articles', label: 'Новости', icon: PenTool, count: articles.length },
-    { id: 'contacts', label: 'Контакты', icon: MapPin },
+    { id: 'users', label: 'Пользователи', icon: Users },
+    { id: 'contacts', label: 'Параметры организации', icon: MapPin },
     { id: 'stats', label: 'Счётчики', icon: Sparkles },
     { id: 'analytics', label: 'Посещения', icon: BarChart3 },
     { id: 'database', label: 'База данных', icon: Database },
   ];
+  const adminTabs = allAdminTabs.filter((tab) => currentUser?.role === 'administrator' || !['contacts', 'stats', 'database'].includes(tab.id));
   const activeAdminTab = adminTabs.find((tab) => tab.id === activeTab) || adminTabs[0];
   const ActiveAdminTabIcon = activeAdminTab.icon;
 
@@ -601,10 +724,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const maxDailyVisits = Math.max(1, ...(visitAnalytics?.daily.map((day) => day.visits) || [1]));
+  const invitedCatName = cats.find((cat) => cat.id === inviteCatId)?.name || 'котика';
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-stone-950/70 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-stone-950/70 backdrop-blur-md overflow-hidden overscroll-none animate-in fade-in duration-200"
       onClick={() => {
         if (isAuthenticated) return;
         if (passwordInput.length === 0) {
@@ -616,7 +740,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     >
       <div
         id="admin-dashboard-container"
-        className="relative w-full h-full sm:h-auto max-w-5xl bg-white rounded-none sm:rounded-3xl shadow-2xl overflow-hidden sm:my-6 max-h-none sm:max-h-[92vh] flex flex-col border-0 sm:border border-stone-200"
+        className="relative w-full h-full sm:h-[92vh] max-w-5xl bg-white rounded-none sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col border-0 sm:border border-stone-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -628,8 +752,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
                 <h3 className="font-heading font-extrabold text-sm sm:text-lg tracking-tight truncate">
-                  <span className="sm:hidden">Панель куратора</span>
-                  <span className="hidden sm:inline">Панель куратора и администрации</span>
+                  {currentUser?.role === 'administrator'
+                    ? 'Панель администратора'
+                    : currentUser?.role === 'curator'
+                      ? 'Панель куратора'
+                      : currentUser?.role === 'owner'
+                        ? 'Панель управления'
+                        : 'Авторизация и вход в личный кабинет'}
                 </h3>
                 {isAuthenticated && (
                   <span className="hidden md:inline px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-bold border border-emerald-500/30 whitespace-nowrap">
@@ -646,7 +775,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {isAuthenticated && (
               <>
-                <button
+                {currentUser?.role !== 'owner' && <button
                   onClick={() => {
                     setIsChangePasswordOpen(true);
                     setPasswordChangeMessage(null);
@@ -655,11 +784,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     setNewPasswordConfirm('');
                   }}
                   className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-700"
-                  title="Изменить пароль куратора"
+                  title="Изменить пароль"
                 >
                   <Key className="w-3.5 h-3.5 text-amber-400" />
                   <span className="hidden sm:inline">Сменить пароль</span>
-                </button>
+                </button>}
 
                 <button
                   onClick={handleLogout}
@@ -724,10 +853,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="password"
                     value={newPasswordInput}
                     onChange={(e) => setNewPasswordInput(e.target.value)}
+                    minLength={8}
+                    maxLength={200}
+                    pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])[A-Za-z0-9]{8,200}"
+                    title="Минимум 8 символов: строчные и заглавные латинские буквы и цифры, без специальных символов"
                     placeholder="Минимум 8 символов"
                     required
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
+                  <p className="mt-1 text-[11px] text-stone-500">Только a-z, A-Z и цифры, без специальных символов.</p>
                 </div>
 
                 <div>
@@ -783,43 +917,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Content Body: Login Screen OR Authenticated Dashboard */}
         {isCheckingSession ? (
-          <div className="p-6 sm:p-12 flex-1 flex flex-col items-center justify-center text-center">
+          <div className="p-6 sm:p-12 flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col items-center justify-center text-center">
             <RefreshCw className="w-8 h-8 text-amber-500 animate-spin mb-4" />
             <p className="text-sm font-semibold text-stone-700">Проверяем доступ к кабинету…</p>
           </div>
         ) : !isAuthenticated ? (
-          <div className="p-6 sm:p-12 flex-1 flex flex-col items-center justify-center max-w-md mx-auto w-full text-center">
+          <div className="p-6 sm:p-12 flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col items-center justify-start max-w-md mx-auto w-full text-center">
             <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-700 flex items-center justify-center mb-5 shadow-inner">
               <KeyRound className="w-8 h-8" />
             </div>
 
             <h4 className="font-heading font-extrabold text-2xl text-stone-900 mb-2">
-              Вход в кабинет куратора
+              {authMode === 'choice' ? `Котик ${invitedCatName} едет домой` : authMode === 'register' ? 'Регистрация нового хозяина' : authMode === 'forgot' ? 'Восстановление пароля' : authMode === 'reset' ? 'Новый пароль' : 'Вход в личный кабинет'}
             </h4>
             <p className="text-sm text-stone-600 mb-6">
-              Для добавления котиков, публикации новостей фонда и обработки заявок введите пароль доступа сотрудника.
+              {authMode === 'choice'
+                ? 'Выберите, как привязать котика к вашему личному кабинету.'
+                : authMode === 'register'
+                ? 'Укажите e-mail, надёжный пароль и имя, которое увидят сотрудники фонда.'
+                : authMode === 'forgot'
+                  ? 'Мы отправим ссылку для создания нового пароля на указанный e-mail.'
+                  : authMode === 'reset'
+                    ? 'Пароль должен содержать строчные и заглавные латинские буквы и цифры, без специальных символов.'
+                    : 'Войдите как администратор, куратор или новый хозяин котика.'}
             </p>
 
-            <form onSubmit={handleLogin} className="w-full space-y-4">
+            {authMode === 'choice' ? (
+              <div className="w-full space-y-3">
+                <button type="button" onClick={() => { setAuthMode('login'); setLoginError(''); }} className="w-full py-3 px-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md shadow-amber-500/20 transition-all">У меня уже есть аккаунт</button>
+                <button type="button" onClick={() => { setAuthMode('register'); setLoginError(''); }} className="w-full py-3 px-4 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-sm transition-all">Зарегистрироваться</button>
+                {loginError && <p className="text-xs text-rose-600 font-semibold">{loginError}</p>}
+              </div>
+            ) : <form onSubmit={authMode === 'register' ? handleRegister : authMode === 'forgot' ? handleForgotPassword : authMode === 'reset' ? handleResetPassword : handleLogin} className="w-full space-y-4">
               <div className="text-left">
+                {authMode !== 'reset' && <>
                 <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                  Пароль администратора
+                  E-mail
                 </label>
                 <div className="relative">
                   <input
-                    ref={passwordInputRef}
-                    type="password"
-                    value={passwordInput}
+                    type="email"
+                    value={emailInput}
                     onChange={(e) => {
-                      setPasswordInput(e.target.value);
+                      setEmailInput(e.target.value);
                       if (loginError) setLoginError('');
                     }}
-                    placeholder="Введите пароль..."
+                    placeholder="name@example.com"
                     autoFocus
                     className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all text-stone-900"
                   />
-                  <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
+                  <Mail className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
                 </div>
+                </>}
+                {authMode === 'register' && <div className="mt-3">
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Отображаемое имя <span className="normal-case font-normal text-stone-400">необязательно</span></label>
+                  <input value={displayNameInput} onChange={(event) => setDisplayNameInput(event.target.value)} maxLength={120} placeholder="Как к вам обращаться" className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                </div>}
+                {!['forgot'].includes(authMode) && <div className="mt-3">
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Пароль</label>
+                  <div className="relative">
+                    <input ref={passwordInputRef} type="password" value={passwordInput} onChange={(event) => { setPasswordInput(event.target.value); setLoginError(''); }} minLength={['register', 'reset'].includes(authMode) ? 8 : undefined} maxLength={['register', 'reset'].includes(authMode) ? 200 : undefined} pattern={['register', 'reset'].includes(authMode) ? '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])[A-Za-z0-9]{8,200}' : undefined} title={['register', 'reset'].includes(authMode) ? 'Минимум 8 символов: строчные и заглавные латинские буквы и цифры, без специальных символов' : undefined} required className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                    <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
+                  </div>
+                </div>}
+                {['register', 'reset'].includes(authMode) && <div className="mt-3">
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Подтверждение пароля</label>
+                  <input type="password" value={passwordConfirmInput} onChange={(event) => setPasswordConfirmInput(event.target.value)} placeholder="Повторите пароль" className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  <p className="mt-1.5 text-[11px] text-stone-500">Минимум 8 символов: a-z, A-Z и цифры. Специальные символы нельзя использовать.</p>
+                </div>}
+                {authMessage && <p className="mt-3 p-3 rounded-xl bg-emerald-50 text-xs text-emerald-800 text-left break-words">{authMessage}</p>}
                 {loginError && (
                   <p className="mt-2 text-xs text-rose-600 font-semibold flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5 shrink-0" />
@@ -832,11 +998,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="submit"
                 className="w-full py-3 px-4 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-sm shadow-md shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
               >
-                <span>Войти в панель управления</span>
+                <span>{authMode === 'register' ? 'Зарегистрироваться' : authMode === 'forgot' ? 'Отправить письмо' : authMode === 'reset' ? 'Сохранить новый пароль' : 'Войти'}</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
-            </form>
+              {authMode === 'login' ? (
+                <div className="flex items-center justify-center gap-4 text-xs font-semibold">
+                  <button type="button" onClick={() => { setAuthMode('register'); setLoginError(''); setAuthMessage(''); }} className="text-amber-700 hover:text-amber-900">Регистрация</button>
+                  <button type="button" onClick={() => { setAuthMode('forgot'); setLoginError(''); setAuthMessage(''); }} className="text-stone-600 hover:text-stone-900">Забыли пароль?</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => { setAuthMode('login'); setLoginError(''); }} className="text-xs font-semibold text-stone-600 hover:text-stone-900">Вернуться ко входу</button>
+              )}
+              {authMode === 'login' && loginError.includes('Подтвердите') && (
+                <button type="button" onClick={async () => { const result = await apiResendVerification(emailInput); setAuthMessage(result.message); }} className="text-xs font-semibold text-amber-700">Отправить письмо повторно</button>
+              )}
+            </form>}
           </div>
+        ) : currentUser?.role === 'owner' ? (
+          <OwnerDashboard user={currentUser} onUserChange={setCurrentUser} initialCatId={initialOwnerCatId} initialContentKind={initialOwnerContentKind} />
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Navigation Tabs Bar */}
@@ -903,7 +1082,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </>
                 )}
               </div>
-              <div className="hidden lg:grid grid-cols-7 gap-2 w-full">
+              <div className="hidden lg:grid grid-cols-8 gap-2 w-full">
                 <button
                   onClick={() => setActiveTab('applications')}
                   title="Заявки на усыновление"
@@ -971,6 +1150,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('users')}
+                  className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
+                    activeTab === 'users' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-100'
+                  )}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Пользователи</span>
+                </button>
+
+                {currentUser?.role === 'administrator' && <button
                   onClick={() => setActiveTab('contacts')}
                   className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
                     activeTab === 'contacts'
@@ -979,10 +1168,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   )}
                 >
                   <MapPin className="w-4 h-4" />
-                  <span>Контакты</span>
-                </button>
+                  <span>Параметры</span>
+                </button>}
 
-                <button
+                {currentUser?.role === 'administrator' && <button
                   onClick={() => setActiveTab('stats')}
                   className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
                     activeTab === 'stats'
@@ -992,7 +1181,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <Sparkles className="w-4 h-4" />
                   <span>Счётчики</span>
-                </button>
+                </button>}
 
                 <button
                   onClick={() => setActiveTab('analytics')}
@@ -1006,7 +1195,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Посещения</span>
                 </button>
 
-                <button
+                {currentUser?.role === 'administrator' && <button
                   onClick={() => setActiveTab('database')}
                   title="База данных"
                   className={`min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
@@ -1026,7 +1215,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     БД
                   </span>
-                </button>
+                </button>}
               </div>
 
               {/* Action buttons inside header corresponding to tab */}
@@ -1052,6 +1241,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 )}
               </div>
             </div>
+
+            {activeTab === 'users' && currentUser && <UsersManagement cats={cats} currentRole={currentUser.role} />}
 
             {/* TAB 1: Applications Management */}
             {activeTab === 'applications' && (

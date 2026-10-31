@@ -4,7 +4,10 @@ import path from 'path';
 import crypto from 'crypto';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
-import { Cat, AdoptionApplication, ShelterArticle, ShelterStats, SiteContacts, DonationSettings, DatabaseBackupSettings } from '../src/types';
+import {
+  Cat, AdoptionApplication, ShelterArticle, ShelterStats, SiteContacts, DonationSettings, DatabaseBackupSettings,
+  OwnerContent, OwnerContentKind, UserAccount, UserRole,
+} from '../src/types';
 import { INITIAL_CATS } from '../src/data/cats';
 import { INITIAL_ARTICLES } from '../src/data/news';
 import realCatPhoto from '../src/assets/defaultCat';
@@ -309,7 +312,16 @@ export async function initDatabase(): Promise<ServerDbStats> {
     "CREATE TABLE IF NOT EXISTS site_settings (key text PRIMARY KEY, data jsonb NOT NULL DEFAULT '{}'::jsonb, updated_at timestamptz NOT NULL DEFAULT now())",
     'CREATE TABLE IF NOT EXISTS admin_users (username text PRIMARY KEY, password_hash text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())',
     'CREATE TABLE IF NOT EXISTS admin_sessions (token_hash text PRIMARY KEY, username text NOT NULL REFERENCES admin_users(username) ON DELETE CASCADE, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now())',
-    'CREATE TABLE IF NOT EXISTS media_assets (file_name text PRIMARY KEY, mime_type text NOT NULL, content bytea NOT NULL, size_bytes integer NOT NULL, created_at timestamptz NOT NULL DEFAULT now())'
+    'CREATE TABLE IF NOT EXISTS media_assets (file_name text PRIMARY KEY, mime_type text NOT NULL, content bytea NOT NULL, size_bytes integer NOT NULL, created_at timestamptz NOT NULL DEFAULT now())',
+    "CREATE TABLE IF NOT EXISTS shelter_users (email text PRIMARY KEY, display_name text NOT NULL, password_hash text NOT NULL, role text NOT NULL CHECK (role IN ('administrator','curator','owner')), verified_at timestamptz, verification_token_hash text, verification_expires_at timestamptz, reset_token_hash text, reset_expires_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())",
+    "DO $migration$ BEGIN ALTER TABLE shelter_users ADD COLUMN pending_cat_id text REFERENCES cats(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_column THEN NULL; END $migration$",
+    'CREATE TABLE IF NOT EXISTS shelter_sessions (token_hash text PRIMARY KEY, email text NOT NULL REFERENCES shelter_users(email) ON DELETE CASCADE, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now())',
+    'CREATE INDEX IF NOT EXISTS shelter_sessions_email_idx ON shelter_sessions(email)',
+    'CREATE TABLE IF NOT EXISTS cat_owners (cat_id text NOT NULL REFERENCES cats(id) ON DELETE CASCADE, owner_email text NOT NULL REFERENCES shelter_users(email) ON DELETE CASCADE, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (cat_id, owner_email))',
+    'CREATE INDEX IF NOT EXISTS cat_owners_owner_idx ON cat_owners(owner_email)',
+    "CREATE TABLE IF NOT EXISTS owner_content (id text PRIMARY KEY, cat_id text NOT NULL REFERENCES cats(id) ON DELETE CASCADE, author_email text NOT NULL REFERENCES shelter_users(email) ON DELETE CASCADE, kind text NOT NULL CHECK (kind IN ('photo','video','comment','question')), body text NOT NULL DEFAULT '', media_url text, is_confidential boolean NOT NULL DEFAULT false, answer text, answered_by text REFERENCES shelter_users(email) ON DELETE SET NULL, moderation_status text NOT NULL DEFAULT 'pending' CHECK (moderation_status IN ('pending','approved','rejected')), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())",
+    'CREATE INDEX IF NOT EXISTS owner_content_cat_idx ON owner_content(cat_id, created_at)',
+    'CREATE INDEX IF NOT EXISTS owner_content_moderation_idx ON owner_content(moderation_status, created_at)'
   ].join(';'));
 
   const legacy = readLegacyDatabase();
@@ -320,6 +332,14 @@ export async function initDatabase(): Promise<ServerDbStats> {
     if (!initialPassword || initialPassword.length < 8) throw new Error('ADMIN_INITIAL_PASSWORD must contain at least 8 characters');
     await pool.query('INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)', ['admin', await bcrypt.hash(initialPassword, 12)]);
   }
+  await pool.query(`
+    INSERT INTO shelter_users (email, display_name, password_hash, role, verified_at)
+    SELECT 'vyanovska@gmail.com', 'Администратор', password_hash, 'administrator', now()
+    FROM admin_users
+    WHERE username = 'admin'
+      AND NOT EXISTS (SELECT 1 FROM shelter_users WHERE role = 'administrator')
+    LIMIT 1
+  `);
   await pool.query(
     'INSERT INTO site_settings (key, data) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING',
     ['shelter_stats', { adoptedCount: 384, currentCount: 51 }]
@@ -350,6 +370,7 @@ export async function initDatabase(): Promise<ServerDbStats> {
     'INSERT INTO site_settings (key, data) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING',
     ['database_backup_schedule', DEFAULT_DATABASE_BACKUP_SETTINGS]
   );
+  await pool.query("DELETE FROM site_settings WHERE key = 'agreement_template'");
   await externalizeDatabaseMedia();
   await migrateMediaDirectory();
   await ensureRelationalSchema(pool);
@@ -390,6 +411,7 @@ export async function initDatabase(): Promise<ServerDbStats> {
     }
   }
   await pool.query('DELETE FROM admin_sessions WHERE expires_at <= now()');
+  await pool.query('DELETE FROM shelter_sessions WHERE expires_at <= now()');
   return getDatabaseStats();
 }
 
@@ -761,29 +783,372 @@ export async function getVisitAnalytics(days: number): Promise<VisitAnalytics> {
   };
 }
 
-export async function verifyAdminPassword(password: string): Promise<boolean> {
-  const result = await pool.query<{ password_hash: string }>('SELECT password_hash FROM admin_users WHERE username = $1', ['admin']);
-  return Boolean(result.rowCount && await bcrypt.compare(password, result.rows[0].password_hash));
+type UserRow = {
+  email: string;
+  display_name: string;
+  password_hash: string;
+  role: UserRole;
+  verified_at: Date | null;
+  created_at: Date;
+  pending_cat_id?: string | null;
+};
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLocaleLowerCase('en-US');
 }
 
-export async function changeAdminPassword(oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
-  if (!(await verifyAdminPassword(oldPassword))) return { success: false, error: 'Текущий пароль указан неверно' };
-  if (newPassword.length < 8) return { success: false, error: 'Новый пароль должен содержать минимум 8 символов' };
-  await pool.query('UPDATE admin_users SET password_hash = $2, updated_at = now() WHERE username = $1', ['admin', await bcrypt.hash(newPassword, 12)]);
-  await pool.query('DELETE FROM admin_sessions');
+function secureTokenHash(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+async function accountFromRow(row: UserRow): Promise<UserAccount> {
+  const cats = await pool.query<{ cat_id: string }>('SELECT cat_id FROM cat_owners WHERE owner_email = $1 ORDER BY created_at, cat_id', [row.email]);
+  return {
+    email: row.email,
+    displayName: row.display_name,
+    role: row.role,
+    isVerified: Boolean(row.verified_at),
+    createdAt: row.created_at.toISOString(),
+    catIds: cats.rows.map((cat) => cat.cat_id),
+  };
+}
+
+export async function getUserBySession(hash: string): Promise<UserAccount | null> {
+  const result = await pool.query<UserRow>(`
+    SELECT u.email, u.display_name, u.password_hash, u.role, u.verified_at, u.created_at
+    FROM shelter_sessions s
+    JOIN shelter_users u ON u.email = s.email
+    WHERE s.token_hash = $1 AND s.expires_at > now()
+  `, [hash]);
+  return result.rowCount ? accountFromRow(result.rows[0]) : null;
+}
+
+export async function authenticateUser(email: string, password: string): Promise<{ user: UserAccount | null; needsVerification: boolean }> {
+  const result = await pool.query<UserRow>(`
+    SELECT email, display_name, password_hash, role, verified_at, created_at
+    FROM shelter_users WHERE email = $1
+  `, [normalizeEmail(email)]);
+  if (!result.rowCount || !(await bcrypt.compare(password, result.rows[0].password_hash))) {
+    return { user: null, needsVerification: false };
+  }
+  if (!result.rows[0].verified_at) return { user: null, needsVerification: true };
+  return { user: await accountFromRow(result.rows[0]), needsVerification: false };
+}
+
+export async function createUserSession(hash: string, email: string, expiresAt: Date): Promise<void> {
+  await pool.query(
+    'INSERT INTO shelter_sessions (token_hash, email, expires_at) VALUES ($1, $2, $3) ON CONFLICT (token_hash) DO UPDATE SET email = EXCLUDED.email, expires_at = EXCLUDED.expires_at',
+    [hash, normalizeEmail(email), expiresAt],
+  );
+}
+
+export async function deleteUserSession(hash: string): Promise<void> {
+  await pool.query('DELETE FROM shelter_sessions WHERE token_hash = $1', [hash]);
+}
+
+export async function registerOwner(email: string, password: string, displayName?: string, pendingCatId?: string): Promise<{ user: UserAccount; token: string }> {
+  const normalized = normalizeEmail(email);
+  const token = crypto.randomBytes(32).toString('hex');
+  const existing = await pool.query<{ verified_at: Date | null }>('SELECT verified_at FROM shelter_users WHERE email = $1', [normalized]);
+  if (existing.rowCount) {
+    if (existing.rows[0].verified_at) throw Object.assign(new Error('Пользователь с таким e-mail уже зарегистрирован'), { status: 409 });
+    throw Object.assign(new Error('Регистрация уже ожидает подтверждения. Запросите повторное письмо.'), { status: 409 });
+  }
+  const result = await pool.query<UserRow>(`
+    INSERT INTO shelter_users (
+      email, display_name, password_hash, role, verification_token_hash, verification_expires_at, pending_cat_id
+    ) VALUES ($1, $2, $3, 'owner', $4, now() + interval '24 hours', $5)
+    RETURNING email, display_name, password_hash, role, verified_at, created_at, pending_cat_id
+  `, [normalized, displayName?.trim() || normalized, await bcrypt.hash(password, 12), secureTokenHash(token), pendingCatId || null]);
+  return { user: await accountFromRow(result.rows[0]), token };
+}
+
+export async function resendVerification(email: string): Promise<string | null> {
+  const normalized = normalizeEmail(email);
+  const token = crypto.randomBytes(32).toString('hex');
+  const result = await pool.query(`
+    UPDATE shelter_users
+    SET verification_token_hash = $2, verification_expires_at = now() + interval '24 hours', updated_at = now()
+    WHERE email = $1 AND role = 'owner' AND verified_at IS NULL
+  `, [normalized, secureTokenHash(token)]);
+  return result.rowCount ? token : null;
+}
+
+export async function verifyRegistration(token: string): Promise<UserAccount | null> {
+  const result = await pool.query<UserRow>(`
+    UPDATE shelter_users
+    SET verified_at = now(), verification_token_hash = NULL, verification_expires_at = NULL, updated_at = now()
+    WHERE verification_token_hash = $1 AND verification_expires_at > now()
+    RETURNING email, display_name, password_hash, role, verified_at, created_at, pending_cat_id
+  `, [secureTokenHash(token)]);
+  if (!result.rowCount) return null;
+  const user = result.rows[0];
+  if (user.pending_cat_id) {
+    await pool.query(
+      'INSERT INTO cat_owners (cat_id, owner_email) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [user.pending_cat_id, user.email],
+    );
+    await pool.query('UPDATE shelter_users SET pending_cat_id = NULL WHERE email = $1', [user.email]);
+  }
+  return accountFromRow(user);
+}
+
+export async function setPendingUserCat(email: string, catId: string): Promise<void> {
+  await pool.query(
+    "UPDATE shelter_users SET pending_cat_id = $2, updated_at = now() WHERE email = $1 AND role = 'owner' AND verified_at IS NULL",
+    [normalizeEmail(email), catId],
+  );
+}
+
+export async function attachUserCat(email: string, catId: string): Promise<UserAccount> {
+  const normalized = normalizeEmail(email);
+  const result = await pool.query<UserRow>(`
+    SELECT email, display_name, password_hash, role, verified_at, created_at
+    FROM shelter_users WHERE email = $1 AND role = 'owner' AND verified_at IS NOT NULL
+  `, [normalized]);
+  if (!result.rowCount) throw Object.assign(new Error('Аккаунт владельца не найден или не подтверждён'), { status: 400 });
+  await pool.query(
+    'INSERT INTO cat_owners (cat_id, owner_email) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [catId, normalized],
+  );
+  return accountFromRow(result.rows[0]);
+}
+
+export async function createPasswordReset(email: string): Promise<string | null> {
+  const token = crypto.randomBytes(32).toString('hex');
+  const result = await pool.query(`
+    UPDATE shelter_users
+    SET reset_token_hash = $2, reset_expires_at = now() + interval '1 hour', updated_at = now()
+    WHERE email = $1 AND verified_at IS NOT NULL
+  `, [normalizeEmail(email), secureTokenHash(token)]);
+  return result.rowCount ? token : null;
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<boolean> {
+  const result = await pool.query<{ email: string }>(`
+    UPDATE shelter_users
+    SET password_hash = $2, reset_token_hash = NULL, reset_expires_at = NULL, updated_at = now()
+    WHERE reset_token_hash = $1 AND reset_expires_at > now()
+    RETURNING email
+  `, [secureTokenHash(token), await bcrypt.hash(newPassword, 12)]);
+  if (result.rowCount) await pool.query('DELETE FROM shelter_sessions WHERE email = $1', [result.rows[0].email]);
+  return Boolean(result.rowCount);
+}
+
+export async function changeUserPassword(email: string, oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  const normalized = normalizeEmail(email);
+  const result = await pool.query<{ password_hash: string }>('SELECT password_hash FROM shelter_users WHERE email = $1', [normalized]);
+  if (!result.rowCount || !(await bcrypt.compare(oldPassword, result.rows[0].password_hash))) {
+    return { success: false, error: 'Текущий пароль указан неверно' };
+  }
+  await pool.query('UPDATE shelter_users SET password_hash = $2, updated_at = now() WHERE email = $1', [normalized, await bcrypt.hash(newPassword, 12)]);
+  await pool.query('DELETE FROM shelter_sessions WHERE email = $1', [normalized]);
   return { success: true };
 }
 
+export async function updateUserProfile(email: string, displayName: string): Promise<UserAccount | null> {
+  const result = await pool.query<UserRow>(`
+    UPDATE shelter_users SET display_name = $2, updated_at = now() WHERE email = $1
+    RETURNING email, display_name, password_hash, role, verified_at, created_at
+  `, [normalizeEmail(email), displayName.trim() || normalizeEmail(email)]);
+  return result.rowCount ? accountFromRow(result.rows[0]) : null;
+}
+
+export async function listUsers(role: UserRole): Promise<UserAccount[]> {
+  const result = await pool.query<UserRow>(`
+    SELECT email, display_name, password_hash, role, verified_at, created_at
+    FROM shelter_users
+    ${role === 'curator' ? "WHERE role = 'owner'" : ''}
+    ORDER BY role, created_at, email
+  `);
+  return Promise.all(result.rows.map(accountFromRow));
+}
+
+export async function createStaffUser(email: string, password: string, displayName: string, role: Extract<UserRole, 'administrator' | 'curator'>): Promise<UserAccount> {
+  const normalized = normalizeEmail(email);
+  const result = await pool.query<UserRow>(`
+    INSERT INTO shelter_users (email, display_name, password_hash, role, verified_at)
+    VALUES ($1, $2, $3, $4, now())
+    RETURNING email, display_name, password_hash, role, verified_at, created_at
+  `, [normalized, displayName.trim() || normalized, await bcrypt.hash(password, 12), role]);
+  return accountFromRow(result.rows[0]);
+}
+
+export async function updateManagedUser(email: string, displayName: string, role: UserRole): Promise<UserAccount | null> {
+  const normalized = normalizeEmail(email);
+  const current = await pool.query<{ role: UserRole }>('SELECT role FROM shelter_users WHERE email = $1', [normalized]);
+  if (!current.rowCount) return null;
+  if (current.rows[0].role === 'administrator' && role !== 'administrator') {
+    const administrators = await pool.query<{ count: string }>("SELECT count(*)::text AS count FROM shelter_users WHERE role = 'administrator'");
+    if (Number(administrators.rows[0].count) <= 1) {
+      throw Object.assign(new Error('Нельзя изменить роль единственного администратора'), { status: 400 });
+    }
+  }
+  const result = await pool.query<UserRow>(`
+    UPDATE shelter_users
+    SET display_name = $2, role = $3, updated_at = now()
+    WHERE email = $1
+    RETURNING email, display_name, password_hash, role, verified_at, created_at
+  `, [normalized, displayName.trim() || normalized, role]);
+  if (role !== 'owner') await pool.query('DELETE FROM cat_owners WHERE owner_email = $1', [normalized]);
+  return accountFromRow(result.rows[0]);
+}
+
+export async function assignUserCats(email: string, catIds: string[]): Promise<UserAccount | null> {
+  const normalized = normalizeEmail(email);
+  const user = await pool.query<UserRow>('SELECT email, display_name, password_hash, role, verified_at, created_at FROM shelter_users WHERE email = $1 AND role = $2', [normalized, 'owner']);
+  if (!user.rowCount) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM cat_owners WHERE owner_email = $1', [normalized]);
+    for (const catId of [...new Set(catIds)]) {
+      await client.query('INSERT INTO cat_owners (cat_id, owner_email) VALUES ($1, $2)', [catId, normalized]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  return accountFromRow(user.rows[0]);
+}
+
+export async function deleteManagedUser(email: string, actorRole: UserRole): Promise<boolean> {
+  const normalized = normalizeEmail(email);
+  const result = await pool.query<{ role: UserRole; verified_at: Date | null }>('SELECT role, verified_at FROM shelter_users WHERE email = $1', [normalized]);
+  if (!result.rowCount) return false;
+  const target = result.rows[0];
+  if (actorRole === 'curator' && (target.role !== 'owner' || target.verified_at)) return false;
+  if (actorRole !== 'administrator' && target.role !== 'owner') return false;
+  if (target.role === 'administrator') return false;
+  return Boolean((await pool.query('DELETE FROM shelter_users WHERE email = $1', [normalized])).rowCount);
+}
+
+export async function getCatsForOwner(email: string): Promise<Cat[]> {
+  const catIds = await pool.query<{ cat_id: string }>('SELECT cat_id FROM cat_owners WHERE owner_email = $1', [normalizeEmail(email)]);
+  const allowed = new Set(catIds.rows.map((row) => row.cat_id));
+  return (await getAllCats()).filter((cat) => allowed.has(cat.id));
+}
+
+function ownerContentFromRow(row: Record<string, unknown>, includeEmail: boolean): OwnerContent {
+  return {
+    id: String(row.id),
+    catId: String(row.cat_id),
+    ...(includeEmail ? { authorEmail: String(row.author_email) } : {}),
+    authorDisplayName: String(row.display_name),
+    kind: row.kind as OwnerContentKind,
+    text: String(row.body || ''),
+    ...(row.media_url ? { mediaUrl: String(row.media_url) } : {}),
+    isConfidential: Boolean(row.is_confidential),
+    ...(row.answer ? { answer: String(row.answer) } : {}),
+    ...(row.answered_by ? { answeredBy: String(row.answered_by) } : {}),
+    moderationStatus: row.moderation_status as OwnerContent['moderationStatus'],
+    createdAt: (row.created_at as Date).toISOString(),
+    updatedAt: (row.updated_at as Date).toISOString(),
+  };
+}
+
+const ownerContentSelect = `
+  SELECT c.*, u.display_name
+  FROM owner_content c JOIN shelter_users u ON u.email = c.author_email
+`;
+
+export async function getOwnerContentForCat(catId: string, viewerEmail?: string, staff = false): Promise<OwnerContent[]> {
+  const values: unknown[] = [catId];
+  let visibility = "c.moderation_status = 'approved' AND c.is_confidential = false";
+  if (staff) visibility = 'true';
+  else if (viewerEmail) {
+    values.push(normalizeEmail(viewerEmail));
+    visibility = "(c.moderation_status = 'approved' AND c.is_confidential = false) OR c.author_email = $2";
+  }
+  const result = await pool.query<Record<string, unknown>>(`${ownerContentSelect} WHERE c.cat_id = $1 AND (${visibility}) ORDER BY c.created_at`, values);
+  return result.rows.map((row) => ownerContentFromRow(row, staff || Boolean(viewerEmail)));
+}
+
+export async function getPendingOwnerContent(): Promise<OwnerContent[]> {
+  const result = await pool.query<Record<string, unknown>>(`${ownerContentSelect} WHERE c.moderation_status = 'pending' OR (c.kind = 'question' AND c.answer IS NULL) ORDER BY c.created_at`);
+  return result.rows.map((row) => ownerContentFromRow(row, true));
+}
+
+export async function createOwnerContent(email: string, data: { catId: string; kind: OwnerContentKind; text?: string; mediaUrl?: string; isConfidential?: boolean }): Promise<OwnerContent> {
+  const normalized = normalizeEmail(email);
+  const ownership = await pool.query('SELECT 1 FROM cat_owners WHERE cat_id = $1 AND owner_email = $2', [data.catId, normalized]);
+  if (!ownership.rowCount) throw Object.assign(new Error('Котик не привязан к вашему аккаунту'), { status: 403 });
+  const cat = (await getAllCats()).find((candidate) => candidate.id === data.catId);
+  if (!cat) throw Object.assign(new Error('Котик не найден'), { status: 404 });
+  if (data.kind !== 'question' && cat.status !== 'adopted') {
+    const message = cat.status === 'trial'
+      ? 'Во время испытательного срока можно только задавать вопросы'
+      : 'Фото, видео и комментарии доступны после завершения испытательного срока';
+    throw Object.assign(new Error(message), { status: 400 });
+  }
+  let mediaUrl = data.mediaUrl?.trim() || null;
+  if (mediaUrl?.startsWith('data:')) {
+    const media = decodeMediaDataUrl(mediaUrl);
+    if (!media) throw Object.assign(new Error('Формат медиафайла не поддерживается'), { status: 400 });
+    await pool.query(
+      'INSERT INTO media_assets (file_name, mime_type, content, size_bytes) VALUES ($1, $2, $3, $4) ON CONFLICT (file_name) DO NOTHING',
+      [media.fileName, media.mimeType, media.content, media.content.length],
+    );
+    mediaUrl = '/media/' + media.fileName;
+  }
+  const id = 'owner-' + crypto.randomUUID();
+  await pool.query(`
+    INSERT INTO owner_content (id, cat_id, author_email, kind, body, media_url, is_confidential)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+  `, [id, data.catId, normalized, data.kind, data.text?.trim() || '', mediaUrl, data.kind === 'question' && Boolean(data.isConfidential)]);
+  return (await getOwnerContentForCat(data.catId, normalized)).find((item) => item.id === id) as OwnerContent;
+}
+
+export async function updateOwnerContent(email: string, id: string, text: string): Promise<OwnerContent | null> {
+  const result = await pool.query<{ cat_id: string }>(`
+    UPDATE owner_content SET body = $3, moderation_status = 'pending', updated_at = now()
+    WHERE id = $1 AND author_email = $2 AND kind = 'comment'
+    RETURNING cat_id
+  `, [id, normalizeEmail(email), text.trim()]);
+  if (!result.rowCount) return null;
+  return (await getOwnerContentForCat(result.rows[0].cat_id, email)).find((item) => item.id === id) || null;
+}
+
+export async function deleteOwnerContent(email: string, id: string): Promise<boolean> {
+  return Boolean((await pool.query(`DELETE FROM owner_content WHERE id = $1 AND author_email = $2 AND kind IN ('photo','video','comment')`, [id, normalizeEmail(email)])).rowCount);
+}
+
+export async function moderateOwnerContent(id: string, status: OwnerContent['moderationStatus'], answer: string | undefined, staffEmail: string): Promise<OwnerContent | null> {
+  const result = await pool.query<{ cat_id: string }>(`
+    UPDATE owner_content
+    SET moderation_status = $2,
+        answer = CASE WHEN kind = 'question' AND $3::text IS NOT NULL THEN $3 ELSE answer END,
+        answered_by = CASE WHEN kind = 'question' AND $3::text IS NOT NULL THEN $4 ELSE answered_by END,
+        updated_at = now()
+    WHERE id = $1 RETURNING cat_id
+  `, [id, status, answer?.trim() || null, normalizeEmail(staffEmail)]);
+  if (!result.rowCount) return null;
+  return (await getOwnerContentForCat(result.rows[0].cat_id, undefined, true)).find((item) => item.id === id) || null;
+}
+
+// Compatibility helpers for older imports. Authentication now uses named accounts.
+export async function verifyAdminPassword(password: string): Promise<boolean> {
+  return Boolean((await authenticateUser('vyanovska@gmail.com', password)).user);
+}
+
+export async function changeAdminPassword(oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  return changeUserPassword('vyanovska@gmail.com', oldPassword, newPassword);
+}
+
 export async function createAdminSession(hash: string, expiresAt: Date): Promise<void> {
-  await pool.query('INSERT INTO admin_sessions (token_hash, username, expires_at) VALUES ($1, $2, $3)', [hash, 'admin', expiresAt]);
+  await createUserSession(hash, 'vyanovska@gmail.com', expiresAt);
 }
 
 export async function hasAdminSession(hash: string): Promise<boolean> {
-  return Boolean((await pool.query('SELECT 1 FROM admin_sessions WHERE token_hash = $1 AND expires_at > now()', [hash])).rowCount);
+  const user = await getUserBySession(hash);
+  return Boolean(user && ['administrator', 'curator'].includes(user.role));
 }
 
 export async function deleteAdminSession(hash: string): Promise<void> {
-  await pool.query('DELETE FROM admin_sessions WHERE token_hash = $1', [hash]);
+  await deleteUserSession(hash);
 }
 
 export async function getDatabaseStats(): Promise<ServerDbStats> {

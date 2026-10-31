@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Plus, Trash2, Camera, ShieldCheck, Heart, Sparkles, Check, AlertCircle, Image as ImageIcon, Video, Link } from 'lucide-react';
+import { X, Upload, Plus, Trash2, Camera, ShieldCheck, Heart, Sparkles, Check, AlertCircle, Image as ImageIcon, Video, Link, FileText } from 'lucide-react';
 import { Cat, CatGender, CatSize, CatTemperament, AgeCategory, CatStatus, CatVideo } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 import { compressImageFile } from '../utils/storage';
-import { apiVerifyAdminPassword, isAdminAuthenticationError } from '../utils/api';
+import { apiOpenMemoPrint, apiVerifyAdminPassword, isAdminAuthenticationError } from '../utils/api';
 import { getCatStatusLabel } from '../utils/catStatus';
 
 
@@ -72,7 +72,9 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
   const [pendingCatData, setPendingCatData] = useState<(Partial<Cat> & { id?: string }) | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoCaptureInputRef = useRef<HTMLInputElement>(null);
   const videoFileInputRef = useRef<HTMLInputElement>(null);
+  const videoCaptureInputRef = useRef<HTMLInputElement>(null);
 
   // Populate form if editing
   useEffect(() => {
@@ -531,6 +533,35 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
                 input.value = '';
               }}
             />
+            <input
+              type="file"
+              ref={photoCaptureInputRef}
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={async (e) => {
+                const input = e.currentTarget;
+                await handleFiles(input.files);
+                input.value = '';
+              }}
+            />
+
+            <div className="grid grid-cols-1 gap-2 sm:hidden">
+              <button
+                type="button"
+                onClick={() => photoCaptureInputRef.current?.click()}
+                className="w-full min-h-12 px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold flex items-center justify-center gap-2"
+              >
+                <Camera className="w-5 h-5" /> Сделать фото
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full min-h-12 px-4 py-3 rounded-xl border border-stone-300 bg-white hover:border-amber-400 hover:bg-amber-50 text-stone-800 text-sm font-bold flex items-center justify-center gap-2"
+              >
+                <Upload className="w-5 h-5 text-amber-600" /> Выбрать из галереи
+              </button>
+            </div>
 
             {/* Drop Zone */}
             <div
@@ -545,7 +576,7 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
                 handleFiles(e.dataTransfer.files);
               }}
               onClick={() => fileInputRef.current?.click()}
-              className={`p-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
+              className={`p-6 border-2 border-dashed rounded-2xl hidden sm:flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
                 isDragging
                   ? 'border-amber-500 bg-amber-50/60'
                   : 'border-stone-300 hover:border-amber-400 bg-stone-50/50 hover:bg-amber-50/20'
@@ -678,25 +709,65 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
                 input.value = '';
               }}
             />
+            <input
+              ref={videoCaptureInputRef}
+              type="file"
+              accept="video/*"
+              capture="environment"
+              className="hidden"
+              onChange={async (event) => {
+                const input = event.currentTarget;
+                await handleVideoFile(input.files);
+                input.value = '';
+              }}
+            />
 
-            <button
-              type="button"
-              onClick={() => videoFileInputRef.current?.click()}
-              disabled={isReadingVideo}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-300 bg-white px-4 py-4 text-sm font-bold text-stone-700 transition hover:border-amber-500 hover:bg-amber-50 disabled:cursor-wait disabled:opacity-60 cursor-pointer"
+            <div className="grid grid-cols-1 gap-2 sm:hidden">
+              <button
+                type="button"
+                onClick={() => videoCaptureInputRef.current?.click()}
+                disabled={isReadingVideo}
+                className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-amber-600 disabled:cursor-wait disabled:opacity-60 cursor-pointer"
+              >
+                <Camera className="h-5 w-5" /> Записать видео камерой
+              </button>
+              <button
+                type="button"
+                onClick={() => videoFileInputRef.current?.click()}
+                disabled={isReadingVideo}
+                className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-300 bg-white px-4 py-3 text-sm font-bold text-stone-700 transition hover:border-amber-500 hover:bg-amber-50 disabled:cursor-wait disabled:opacity-60 cursor-pointer"
+              >
+                {isReadingVideo ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
+                    Обрабатываем…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 text-amber-600" />
+                    Выбрать из галереи
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div
+              onClick={() => !isReadingVideo && videoFileInputRef.current?.click()}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                void handleVideoFile(event.dataTransfer.files);
+              }}
+              className="hidden sm:flex min-h-36 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 bg-white px-6 py-5 text-center cursor-pointer transition hover:border-amber-500 hover:bg-amber-50/40"
             >
               {isReadingVideo ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
-                  Обрабатываем видео…
-                </>
+                <span className="h-6 w-6 animate-spin rounded-full border-2 border-amber-600 border-t-transparent mb-2" />
               ) : (
-                <>
-                  <Upload className="h-4 w-4 text-amber-600" />
-                  Загрузить короткое видео
-                </>
+                <Upload className="h-7 w-7 text-amber-600 mb-2" />
               )}
-            </button>
+              <strong className="text-sm text-stone-800">{isReadingVideo ? 'Обрабатываем видео…' : 'Выберите или перетащите короткое видео'}</strong>
+              <span className="mt-1 text-xs text-stone-500">MP4, WebM, OGG или MOV — до 25 МБ и 60 секунд</span>
+            </div>
 
             <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-stone-700">
@@ -1085,6 +1156,17 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Удалить анкету</span>
+              </button>
+            )}
+
+            {isEditing && initialCat && (
+              <button
+                type="button"
+                onClick={() => apiOpenMemoPrint(initialCat.id)}
+                className="px-4 py-2.5 rounded-xl border border-amber-300 text-amber-800 hover:bg-amber-50 text-xs font-bold transition-colors flex items-center gap-1.5"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Печать памятки</span>
               </button>
             )}
 

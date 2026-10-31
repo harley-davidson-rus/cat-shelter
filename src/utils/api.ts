@@ -1,4 +1,7 @@
-import { Cat, AdoptionApplication, ShelterArticle, ApplicationStatus, ShelterStats, SiteContacts, DonationSettings } from '../types';
+import {
+  Cat, AdoptionApplication, ShelterArticle, ApplicationStatus, ShelterStats, SiteContacts, DonationSettings,
+  AuthSession, OwnerContent, OwnerContentKind, UserAccount, UserRole,
+} from '../types';
 import realCatPhoto from '../assets/defaultCat';
 
 export interface ServerDatabaseStats {
@@ -216,6 +219,10 @@ export function apiUpdateDonationSettings(settings: DonationSettings): Promise<D
   });
 }
 
+export function apiOpenMemoPrint(catId: string): void {
+  window.open('/api/cats/' + encodeURIComponent(catId) + '/memo-print', '_blank', 'noopener,noreferrer');
+}
+
 export function apiGetSettings(): Promise<Record<string, unknown>> {
   return request('/api/preferences');
 }
@@ -228,24 +235,142 @@ export async function apiSaveSetting(key: string, value: unknown): Promise<void>
   });
 }
 
-export async function apiVerifyAdminPassword(password: string): Promise<boolean> {
-  try {
-    const authenticated = (await request<{ authenticated: boolean }>('/api/admin/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    })).authenticated;
-    if (authenticated && typeof window !== 'undefined') {
-      window.dispatchEvent(new Event(ADMIN_SESSION_AUTHENTICATED_EVENT));
-    }
-    return authenticated;
-  } catch { return false; }
+export async function apiLogin(email: string, password: string, catId?: string, invite?: string): Promise<AuthSession> {
+  const session = await request<AuthSession>('/api/admin/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, catId, invite }),
+  });
+  if (session.authenticated && typeof window !== 'undefined') {
+    if (session.user?.email) window.localStorage.setItem('shelter:last-login-email', session.user.email);
+    window.dispatchEvent(new Event(ADMIN_SESSION_AUTHENTICATED_EVENT));
+  }
+  return session;
 }
 
-export async function apiGetAdminSession(): Promise<boolean> {
+export async function apiVerifyAdminPassword(password: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const email = window.localStorage.getItem('shelter:last-login-email') || 'vyanovska@gmail.com';
+  try { return (await apiLogin(email, password)).authenticated; } catch { return false; }
+}
+
+export async function apiGetAdminSession(): Promise<AuthSession> {
   try {
-    return (await request<{ authenticated: boolean }>('/api/admin/session')).authenticated;
-  } catch { return false; }
+    return await request<AuthSession>('/api/admin/session');
+  } catch { return { authenticated: false }; }
+}
+
+export function apiRegisterOwner(email: string, password: string, passwordConfirm: string, displayName?: string, catId?: string, invite?: string): Promise<{ message: string }> {
+  return request('/api/auth/register', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, passwordConfirm, displayName, catId, invite }),
+  });
+}
+
+export function apiAcceptCatInvite(catId: string, invite: string): Promise<UserAccount> {
+  return request('/api/account/accept-cat-invite', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catId, invite }),
+  });
+}
+
+export function apiResendVerification(email: string): Promise<{ message: string }> {
+  return request('/api/auth/resend-verification', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+  });
+}
+
+const registrationVerificationRequests = new Map<string, Promise<{ message: string; user: UserAccount }>>();
+
+export function apiVerifyRegistration(token: string): Promise<{ message: string; user: UserAccount }> {
+  const pendingRequest = registrationVerificationRequests.get(token);
+  if (pendingRequest) return pendingRequest;
+
+  // Verification consumes a one-time token. Reuse the same request when React
+  // StrictMode runs the link-processing effect twice during development.
+  const verificationRequest = request<{ message: string; user: UserAccount }>('/api/auth/verify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+  });
+  registrationVerificationRequests.set(token, verificationRequest);
+  void verificationRequest.catch(() => {
+    if (registrationVerificationRequests.get(token) === verificationRequest) {
+      registrationVerificationRequests.delete(token);
+    }
+  });
+  return verificationRequest;
+}
+
+export function apiRequestPasswordReset(email: string): Promise<{ message: string }> {
+  return request('/api/auth/request-password-reset', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+  });
+}
+
+export function apiResetPassword(token: string, password: string, passwordConfirm: string): Promise<{ message: string }> {
+  return request('/api/auth/reset-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, password, passwordConfirm }),
+  });
+}
+
+export function apiUpdateAccount(displayName: string): Promise<UserAccount> {
+  return request('/api/account', {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName }),
+  });
+}
+
+export function apiGetUsers(): Promise<UserAccount[]> { return request('/api/users'); }
+
+export function apiCreateStaffUser(data: { email: string; password: string; displayName: string; role: Extract<UserRole, 'administrator' | 'curator'> }): Promise<UserAccount> {
+  return request('/api/users/staff', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  });
+}
+
+export function apiUpdateUser(email: string, data: { displayName: string; role: UserRole }): Promise<UserAccount> {
+  return request('/api/users/' + encodeURIComponent(email), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  });
+}
+
+export function apiAssignUserCats(email: string, catIds: string[]): Promise<UserAccount> {
+  return request('/api/users/' + encodeURIComponent(email) + '/cats', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catIds }),
+  });
+}
+
+export async function apiDeleteUser(email: string): Promise<boolean> {
+  return (await request<{ success: boolean }>('/api/users/' + encodeURIComponent(email), { method: 'DELETE' })).success;
+}
+
+export function apiGetAccountCats(): Promise<Cat[]> { return request('/api/account/cats'); }
+export function apiGetOwnerContent(catId: string): Promise<OwnerContent[]> { return request('/api/cats/' + encodeURIComponent(catId) + '/owner-content'); }
+export function apiGetPendingOwnerContent(): Promise<OwnerContent[]> { return request('/api/owner-content/pending'); }
+
+export function apiCreateOwnerContent(data: { catId: string; kind: OwnerContentKind; text?: string; mediaUrl?: string; isConfidential?: boolean }): Promise<OwnerContent> {
+  return request('/api/owner-content', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  });
+}
+
+export function apiCreateOwnerMediaBatch(data: { catId: string; kind: 'photo' | 'video'; mediaUrls: string[] }): Promise<OwnerContent[]> {
+  return request('/api/owner-content/media-batch', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  });
+}
+
+export function apiUpdateOwnerContent(id: string, text: string): Promise<OwnerContent> {
+  return request('/api/owner-content/' + encodeURIComponent(id), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+  });
+}
+
+export async function apiDeleteOwnerContent(id: string): Promise<boolean> {
+  return (await request<{ success: boolean }>('/api/owner-content/' + encodeURIComponent(id), { method: 'DELETE' })).success;
+}
+
+export function apiModerateOwnerContent(id: string, status: OwnerContent['moderationStatus'], answer?: string): Promise<OwnerContent> {
+  return request('/api/owner-content/' + encodeURIComponent(id) + '/moderate', {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, answer }),
+  });
 }
 
 export function apiRecordVisit(): Promise<{ success: boolean }> {

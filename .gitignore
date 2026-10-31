@@ -17,6 +17,9 @@ data/media/
 certs/*.key
 certs/*.crt
 
+# Isolated local preview runtime (PostgreSQL data, logs and PID files).
+.preview/
+
 service/*.exe
 service/logs/
 caddy/*.exe

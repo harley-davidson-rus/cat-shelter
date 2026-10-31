@@ -85,8 +85,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               id="curator-login-button"
               type="button"
               onClick={onOpenAdminDashboard}
-              aria-label="Войти в режим куратора"
-              title="Вход для куратора"
+              aria-label="Войти в личный кабинет"
+              title="Личный кабинет"
               className="w-10 h-10 shrink-0 rounded-xl border border-stone-200 hover:border-amber-300 hover:bg-amber-50 text-stone-600 hover:text-amber-700 flex items-center justify-center transition-colors cursor-pointer"
             >
               <Lock className="w-4 h-4" aria-hidden="true" />
@@ -164,7 +164,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="w-full min-h-11 px-4 py-2.5 rounded-xl border border-stone-200 bg-white hover:bg-amber-50 hover:border-amber-300 text-stone-700 hover:text-amber-800 text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <Lock className="w-4 h-4 text-amber-600" aria-hidden="true" />
-                <span>Вход для куратора</span>
+                <span>Личный кабинет</span>
               </button>
             </div>
           </div>
