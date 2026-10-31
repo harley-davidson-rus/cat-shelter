@@ -32,8 +32,8 @@ const TEMPERAMENT_LABELS: Record<CatTemperament, { label: string; desc: string }
 };
 
 type GalleryMediaItem =
-  | { type: 'photo'; index: number; url: string }
-  | { type: 'video'; index: number; url: string; thumbnail?: string; title: string };
+  | { type: 'photo'; index: number; url: string; moderationStatus?: OwnerContent['moderationStatus'] }
+  | { type: 'video'; index: number; url: string; thumbnail?: string; title: string; moderationStatus?: OwnerContent['moderationStatus'] };
 
 export const CatDetailModal: React.FC<CatDetailModalProps> = ({
   cat,
@@ -94,11 +94,14 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
     return () => { cancelled = true; };
   }, [cat.id]);
 
-  const approvedHomePhotos = ownerContent
-    .filter((item) => item.kind === 'photo' && item.mediaUrl && item.moderationStatus === 'approved')
-    .map((item) => item.mediaUrl as string);
-  const approvedHomeVideos = ownerContent
-    .filter((item) => item.kind === 'video' && item.mediaUrl && item.moderationStatus === 'approved')
+  const visibleOwnerContent = ownerContent.filter((item) =>
+    item.moderationStatus === 'approved'
+    || (canManageHomeContent && item.moderationStatus === 'pending')
+  );
+  const homePhotos = visibleOwnerContent
+    .filter((item) => item.kind === 'photo' && item.mediaUrl);
+  const homeVideos = visibleOwnerContent
+    .filter((item) => item.kind === 'video' && item.mediaUrl)
     .map((item) => ({
       id: item.id,
       url: item.mediaUrl as string,
@@ -106,11 +109,14 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
       duration: 'Видео из дома',
       thumbnail: '',
       isShort: true,
+      moderationStatus: item.moderationStatus,
     }));
-  const ownerMessages = ownerContent.filter((item) => item.kind === 'comment' || item.kind === 'question');
+  const ownerMessages = visibleOwnerContent.filter((item) => item.kind === 'comment' || item.kind === 'question');
   const profilePhotos = cat.photos.length > 0 ? cat.photos : [realCatPhoto];
-  const galleryPhotos = activeContentTab === 'home' ? approvedHomePhotos : profilePhotos;
-  const galleryVideos = activeContentTab === 'home' ? approvedHomeVideos : (cat.videos || []);
+  const galleryPhotos = activeContentTab === 'home'
+    ? homePhotos.map((item) => item.mediaUrl as string)
+    : profilePhotos;
+  const galleryVideos = activeContentTab === 'home' ? homeVideos : (cat.videos || []);
   const hasGalleryMedia = galleryPhotos.length > 0 || galleryVideos.length > 0;
   const currentVideo = galleryVideos[activeVideoIdx];
   const currentPhoto = galleryPhotos[activePhotoIdx] || galleryPhotos[0] || realCatPhoto;
@@ -120,13 +126,19 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
     ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'
     : 'none';
   const mediaItems: GalleryMediaItem[] = [
-    ...galleryPhotos.map((url, index) => ({ type: 'photo' as const, index, url })),
+    ...galleryPhotos.map((url, index) => ({
+      type: 'photo' as const,
+      index,
+      url,
+      moderationStatus: activeContentTab === 'home' ? homePhotos[index]?.moderationStatus : undefined,
+    })),
     ...galleryVideos.map((video, index) => ({
       type: 'video' as const,
       index,
       url: video.url,
       thumbnail: video.thumbnail,
       title: video.title,
+      moderationStatus: activeContentTab === 'home' ? homeVideos[index]?.moderationStatus : undefined,
     })),
   ];
   const activeMediaIndex = activeMediaType === 'photo'
@@ -144,7 +156,7 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
     setActiveVideoIdx(0);
     setActiveMediaType(galleryPhotos.length > 0 ? 'photo' : 'video');
     setIsPhotoFullscreen(false);
-  }, [activeContentTab, approvedHomePhotos.length, approvedHomeVideos.length]);
+  }, [activeContentTab, homePhotos.length, homeVideos.length]);
 
   const handleCopyLink = async () => {
     let copied = false;
@@ -580,6 +592,12 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                   </>
                 )}
 
+                {currentMediaItem?.moderationStatus === 'pending' && (
+                  <span className="absolute top-3 left-3 z-20 px-2.5 py-1 rounded-full bg-amber-500 text-white text-[11px] font-bold shadow-md">
+                    На проверке
+                  </span>
+                )}
+
                 {/* Media Switcher floating tabs on bottom left of media player */}
                 <div className="absolute bottom-3 left-3 z-20 flex items-center gap-1.5 bg-black/70 backdrop-blur-md p-1 rounded-xl">
                   <button
@@ -638,7 +656,13 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                       }}
                       className="w-full h-full object-cover"
                     />
-                    {idx >= profilePhotos.length && <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[8px] font-bold">Из дома</span>}
+                    {activeContentTab === 'home' && (
+                      <span className={`absolute left-1 bottom-1 px-1.5 py-0.5 rounded text-white text-[8px] font-bold ${
+                        homePhotos[idx]?.moderationStatus === 'pending' ? 'bg-amber-500' : 'bg-emerald-600'
+                      }`}>
+                        {homePhotos[idx]?.moderationStatus === 'pending' ? 'На проверке' : 'Из дома'}
+                      </span>
+                    )}
                   </button>
                 ))}
 
@@ -671,7 +695,13 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                         <Play className="w-3 h-3 fill-white ml-0.5" />
                       </div>
                     </div>
-                    {vIdx >= (cat.videos?.length || 0) && <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[8px] font-bold">Из дома</span>}
+                    {activeContentTab === 'home' && (
+                      <span className={`absolute left-1 bottom-1 px-1.5 py-0.5 rounded text-white text-[8px] font-bold ${
+                        homeVideos[vIdx]?.moderationStatus === 'pending' ? 'bg-amber-500' : 'bg-emerald-600'
+                      }`}>
+                        {homeVideos[vIdx]?.moderationStatus === 'pending' ? 'На проверке' : 'Из дома'}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -899,12 +929,15 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                         <div className="flex items-center gap-2">
                           <strong className="text-sm text-amber-900">{item.authorDisplayName}</strong>
                           <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">{item.kind === 'question' ? 'Вопрос' : 'Комментарий'}</span>
+                          {item.moderationStatus === 'pending' && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">На проверке</span>
+                          )}
                         </div>
                         <span className="text-xs text-stone-400">{new Date(item.createdAt).toLocaleDateString('ru-RU')}</span>
                       </div>
                       {item.text && <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-line">{item.text}</p>}
                       {item.answer && <div className="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-950"><strong className="block mb-1">Ответ куратора</strong><p className="whitespace-pre-line">{item.answer}</p></div>}
-                      {item.moderationStatus !== 'approved' && <p className="mt-3 text-xs text-amber-700">Материал ожидает проверки и пока виден только вам и сотрудникам фонда.</p>}
+                      {item.moderationStatus === 'pending' && <p className="mt-3 text-xs text-amber-700">Материал ожидает проверки и пока виден только вам и сотрудникам фонда.</p>}
                     </article>
                   ))}
                 </div>
@@ -976,6 +1009,11 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
             onTouchEnd={handleFullscreenTouchEnd}
             onTouchCancel={() => finishFullscreenSwipe(null)}
           >
+            {currentMediaItem?.moderationStatus === 'pending' && (
+              <span className="absolute top-3 left-3 z-30 px-3 py-1.5 rounded-full bg-amber-500 text-white text-xs font-bold shadow-lg">
+                На проверке
+              </span>
+            )}
             {previousMediaItem && (
               <div
                 className="absolute inset-0 flex items-center justify-center pointer-events-none"
@@ -1062,6 +1100,11 @@ export const CatDetailModal: React.FC<CatDetailModalProps> = ({
                         </span>
                       </span>
                     </>
+                  )}
+                  {item.moderationStatus === 'pending' && (
+                    <span className="absolute left-0.5 bottom-0.5 px-1 py-0.5 rounded bg-amber-500 text-white text-[7px] font-bold leading-none">
+                      На проверке
+                    </span>
                   )}
                 </button>
               ))}
