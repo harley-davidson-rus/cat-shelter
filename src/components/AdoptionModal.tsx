@@ -163,7 +163,7 @@ export const AdoptionModal: React.FC<AdoptionModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="overflow-y-auto p-4 sm:p-6">
+        <div className="overflow-y-auto overflow-x-hidden p-4 sm:p-6">
           {submittedAppId ? (
             /* Success State */
             <div className="text-center py-8 px-4 space-y-6">
@@ -556,11 +556,11 @@ export const AdoptionModal: React.FC<AdoptionModalProps> = ({
               )}
 
               {/* Action Buttons */}
-              <div className="pt-2 flex items-center justify-end gap-3 border-t border-stone-100">
+              <div className="pt-2 grid grid-cols-1 gap-2 border-t border-stone-100 sm:flex sm:items-center sm:justify-end sm:gap-3">
                 <button
                   type="button"
                   onClick={handleResetAndClose}
-                  className="px-4 py-2.5 rounded-xl text-stone-600 hover:bg-stone-100 text-xs font-semibold transition-colors"
+                  className="w-full px-4 py-2.5 rounded-xl text-stone-600 hover:bg-stone-100 text-xs font-semibold transition-colors sm:w-auto"
                 >
                   Отмена
                 </button>
@@ -568,7 +568,7 @@ export const AdoptionModal: React.FC<AdoptionModalProps> = ({
                   id="submit-adoption-application-btn"
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-98 disabled:opacity-50 text-white text-xs sm:text-sm font-bold shadow-md shadow-amber-500/25 transition-all flex items-center gap-2"
+                  className="w-full px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-98 disabled:opacity-50 text-white text-xs sm:text-sm font-bold shadow-md shadow-amber-500/25 transition-all flex items-center justify-center gap-2 sm:w-auto sm:px-6"
                 >
                   {isSubmitting ? (
                     <>

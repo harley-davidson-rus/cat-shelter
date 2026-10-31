@@ -464,7 +464,7 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 flex-1 text-sm text-stone-700">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden space-y-6 flex-1 text-sm text-stone-700">
           {errorMessage && (
             <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2 font-medium">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -1142,39 +1142,39 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
             </div>
           </div>
           {/* Footer Actions inside Form */}
-          <div className="pt-2 flex items-center justify-between gap-3 border-t border-stone-100">
-            {isEditing && onDeleteCat && initialCat && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm(`Удалить анкету котика «${initialCat.name}» из каталога?`)) {
-                    onDeleteCat(initialCat.id);
-                    onClose();
-                  }
-                }}
-                className="px-4 py-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-colors flex items-center gap-1.5"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Удалить анкету</span>
-              </button>
-            )}
+          <div className="pt-2 flex flex-col gap-2 border-t border-stone-100 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            {isEditing && initialCat && <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+              {onDeleteCat && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Удалить анкету котика «${initialCat.name}» из каталога?`)) {
+                      onDeleteCat(initialCat.id);
+                      onClose();
+                    }
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 sm:w-auto sm:px-4"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Удалить анкету</span>
+                </button>
+              )}
 
-            {isEditing && initialCat && (
               <button
                 type="button"
                 onClick={() => apiOpenMemoPrint(initialCat.id)}
-                className="px-4 py-2.5 rounded-xl border border-amber-300 text-amber-800 hover:bg-amber-50 text-xs font-bold transition-colors flex items-center gap-1.5"
+                className="w-full px-3 py-2.5 rounded-xl border border-amber-300 text-amber-800 hover:bg-amber-50 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 sm:w-auto sm:px-4"
               >
                 <FileText className="w-4 h-4" />
                 <span>Печать памятки</span>
               </button>
-            )}
+            </div>}
 
-            <div className="flex items-center gap-2.5 ml-auto">
+            <div className="grid grid-cols-2 gap-2 sm:ml-auto sm:flex sm:items-center sm:gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-700 hover:bg-stone-100 text-xs font-bold transition-colors"
+                className="w-full px-4 py-2.5 rounded-xl border border-stone-200 text-stone-700 hover:bg-stone-100 text-xs font-bold transition-colors sm:w-auto"
               >
                 Отмена
               </button>
@@ -1182,7 +1182,7 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                className="w-full min-w-0 px-3 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold text-center shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait sm:w-auto sm:px-5"
               >
                 {isSaving ? 'Сохраняем…' : isEditing ? 'Сохранить анкету' : 'Сохранить и добавить анкету'}
               </button>

@@ -709,7 +709,7 @@ export const PhotoCropAdjustModal: React.FC<PhotoCropAdjustModalProps> = ({
           </div>
 
           {/* Quick Framing Tools: Zoom In / Zoom Out / Maximize / Rotate */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1 border-t border-stone-200/60">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1 border-t border-stone-200/60 overflow-x-hidden">
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
@@ -769,11 +769,11 @@ export const PhotoCropAdjustModal: React.FC<PhotoCropAdjustModalProps> = ({
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto sm:items-center">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 font-bold text-xs hover:bg-stone-100 cursor-pointer"
+                className="w-full px-4 py-2 rounded-xl border border-stone-200 text-stone-600 font-bold text-xs hover:bg-stone-100 cursor-pointer sm:w-auto"
               >
                 Отмена
               </button>
@@ -781,7 +781,7 @@ export const PhotoCropAdjustModal: React.FC<PhotoCropAdjustModalProps> = ({
                 type="button"
                 onClick={handleSave}
                 disabled={isProcessing}
-                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="w-full min-w-0 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 sm:w-auto sm:px-5"
               >
                 <Check className="w-4 h-4 stroke-[2.5]" />
                 <span>{isProcessing ? 'Кадрирование...' : 'Применить подгонку'}</span>
