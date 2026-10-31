@@ -988,7 +988,7 @@ async function startServer() {
   });
 
   app.get('/api/users', requireAdmin, async (req: ShelterRequest, res, next) => {
-    try { res.json(await listUsers(req.user!.role)); } catch (error) { next(error); }
+    try { res.json(await listUsers(req.user!.role, req.user!.email)); } catch (error) { next(error); }
   });
   app.post('/api/users/staff', requireAdmin, requireRole('administrator'), async (req, res, next) => {
     try {
@@ -1001,12 +1001,16 @@ async function startServer() {
       res.status(201).json(await createStaffUser(input.email, input.password, input.displayName, input.role));
     } catch (error) { next(error); }
   });
-  app.patch('/api/users/:email', requireAdmin, requireRole('administrator'), async (req, res, next) => {
+  app.patch('/api/users/:email', requireAdmin, requireRole('administrator'), async (req: ShelterRequest, res, next) => {
     try {
       const input = validate(z.object({
         displayName: z.string().trim().max(120),
         role: z.enum(['administrator', 'curator', 'owner']),
       }), req.body);
+      const isCurrentUser = req.params.email.trim().toLocaleLowerCase('en-US') === req.user!.email.toLocaleLowerCase('en-US');
+      if (isCurrentUser && input.role !== req.user!.role) {
+        return res.status(400).json({ error: 'Свою роль изменить нельзя' });
+      }
       const user = await updateManagedUser(req.params.email, input.displayName, input.role);
       if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
       res.json(user);

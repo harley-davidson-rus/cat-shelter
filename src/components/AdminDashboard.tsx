@@ -775,21 +775,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {isAuthenticated && (
               <>
-                {currentUser?.role !== 'owner' && <button
-                  onClick={() => {
-                    setIsChangePasswordOpen(true);
-                    setPasswordChangeMessage(null);
-                    setOldPasswordInput('');
-                    setNewPasswordInput('');
-                    setNewPasswordConfirm('');
-                  }}
-                  className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-700"
-                  title="Изменить пароль"
-                >
-                  <Key className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Сменить пароль</span>
-                </button>}
-
                 <button
                   onClick={handleLogout}
                   className="px-2.5 py-2 sm:px-3 sm:py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/70 text-rose-100 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-rose-900/70"
@@ -820,7 +805,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
                     <Key className="w-4 h-4" />
                   </div>
-                  <h4 className="font-bold text-stone-900 text-sm">Смена пароля куратора</h4>
+                  <h4 className="font-bold text-stone-900 text-sm">Смена пароля</h4>
                 </div>
                 <button
                   onClick={() => setIsChangePasswordOpen(false)}
@@ -1242,7 +1227,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {activeTab === 'users' && currentUser && <UsersManagement cats={cats} currentRole={currentUser.role} />}
+            {activeTab === 'users' && currentUser && <UsersManagement
+              cats={cats}
+              currentUser={currentUser}
+              onChangeOwnPassword={() => {
+                setIsChangePasswordOpen(true);
+                setPasswordChangeMessage(null);
+                setOldPasswordInput('');
+                setNewPasswordInput('');
+                setNewPasswordConfirm('');
+              }}
+            />}
 
             {/* TAB 1: Applications Management */}
             {activeTab === 'applications' && (

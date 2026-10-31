@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Maximize2, Plus, Save, Search, Send, Trash2, UserCog, Users, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, KeyRound, Maximize2, Plus, Save, Search, Send, Trash2, UserCog, Users, X } from 'lucide-react';
 import { Cat, OwnerContent, UserAccount, UserRole } from '../types';
 import { apiAssignUserCats, apiCreateStaffUser, apiDeleteUser, apiGetPendingOwnerContent, apiGetUsers, apiModerateOwnerContent, apiUpdateUser } from '../utils/api';
 import { LightboxMediaItem, MediaLightbox } from './MediaLightbox';
 
 interface UsersManagementProps {
   cats: Cat[];
-  currentRole: UserRole;
+  currentUser: UserAccount;
+  onChangeOwnPassword: () => void;
 }
 
 const roleLabel: Record<UserRole, string> = {
@@ -15,7 +16,8 @@ const roleLabel: Record<UserRole, string> = {
   owner: 'Новый хозяин котика',
 };
 
-export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentRole }) => {
+export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentUser, onChangeOwnPassword }) => {
+  const currentRole = currentUser.role;
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [pendingContent, setPendingContent] = useState<OwnerContent[]>([]);
   const [search, setSearch] = useState('');
@@ -87,7 +89,8 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentR
 
   const saveUser = async (user: UserAccount) => {
     try {
-      const updated = await apiUpdateUser(user.email, { displayName: editDisplayName, role: editRole });
+      const isCurrentUser = user.email === currentUser.email;
+      const updated = await apiUpdateUser(user.email, { displayName: editDisplayName, role: isCurrentUser ? user.role : editRole });
       setUsers((items) => items.map((item) => item.email === updated.email ? updated : item));
       setDraftCatIds(updated.catIds);
       setMessage({ type: 'success', text: `Пользователь ${updated.email} обновлён.` });
@@ -262,9 +265,18 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentR
             </button>
             {expandedEmail === user.email && (
               <div className="border-t border-stone-100 p-4 bg-stone-50 space-y-4">
+                {user.email === currentUser.email && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div>
+                      <p className="text-xs font-bold text-amber-950">Безопасность вашей учётной записи</p>
+                      <p className="mt-0.5 text-[11px] text-amber-800">Пароль может изменить только владелец текущей учётной записи.</p>
+                    </div>
+                    <button type="button" onClick={onChangeOwnPassword} className="px-4 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-bold flex items-center justify-center gap-2"><KeyRound className="w-4 h-4 text-amber-400" /> Изменить пароль</button>
+                  </div>
+                )}
                 {currentRole === 'administrator' && <div className="grid sm:grid-cols-[1fr_220px_auto] gap-2 items-end">
                   <label className="space-y-1"><span className="block text-xs font-bold text-stone-600">Отображаемое имя</span><input value={editDisplayName} onChange={(event) => setEditDisplayName(event.target.value)} maxLength={120} className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-sm" /></label>
-                  <label className="space-y-1"><span className="block text-xs font-bold text-stone-600">Роль</span><select value={editRole} onChange={(event) => setEditRole(event.target.value as UserRole)} className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-sm"><option value="administrator">Администратор</option><option value="curator">Куратор</option><option value="owner">Новый хозяин котика</option></select></label>
+                  <label className="space-y-1"><span className="block text-xs font-bold text-stone-600">Роль</span><select value={editRole} disabled={user.email === currentUser.email} onChange={(event) => setEditRole(event.target.value as UserRole)} title={user.email === currentUser.email ? 'Свою роль изменить нельзя' : undefined} className="w-full p-2.5 rounded-xl border border-stone-200 bg-white text-sm disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"><option value="administrator">Администратор</option><option value="curator">Куратор</option><option value="owner">Новый хозяин котика</option></select>{user.email === currentUser.email && <span className="block text-[11px] text-stone-500">Свою роль изменить нельзя.</span>}</label>
                   <button type="button" onClick={() => saveUser(user)} className="px-4 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-bold flex items-center justify-center gap-2"><Save className="w-4 h-4 text-amber-400" /> Сохранить пользователя</button>
                 </div>}
                 {user.role === 'owner' && <>
