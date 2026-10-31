@@ -51,7 +51,8 @@ const CatDetailModal = lazy(() => import('./components/CatDetailModal').then((mo
 const AddEditCatModal = lazy(() => import('./components/AddEditCatModal').then((module) => ({ default: module.AddEditCatModal })));
 const AdoptionModal = lazy(() => import('./components/AdoptionModal').then((module) => ({ default: module.AdoptionModal })));
 const MyApplicationsModal = lazy(() => import('./components/MyApplicationsModal').then((module) => ({ default: module.MyApplicationsModal })));
-const AdminDashboard = lazy(() => import('./components/AdminDashboard').then((module) => ({ default: module.AdminDashboard })));
+const loadAdminDashboard = () => import('./components/AdminDashboard').then((module) => ({ default: module.AdminDashboard }));
+const AdminDashboard = lazy(loadAdminDashboard);
 const FavoritesModal = lazy(() => import('./components/FavoritesModal').then((module) => ({ default: module.FavoritesModal })));
 const ArticleDetailModal = lazy(() => import('./components/ArticleDetailModal').then((module) => ({ default: module.ArticleDetailModal })));
 const PublishArticleModal = lazy(() => import('./components/PublishArticleModal').then((module) => ({ default: module.PublishArticleModal })));
@@ -78,6 +79,13 @@ export default function App() {
     if (visitRecordedForThisPageLoad) return;
     visitRecordedForThisPageLoad = true;
     apiRecordVisit().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // The cabinet is a separate bundle. Warm it shortly after the public page
+    // becomes interactive so opening it does not wait for a network round trip.
+    const preloadTimer = window.setTimeout(() => { void loadAdminDashboard(); }, 300);
+    return () => window.clearTimeout(preloadTimer);
   }, []);
   const [catsLoaded, setCatsLoaded] = useState(false);
   const [heroDateKey, setHeroDateKey] = useState(getLocalDateKey);
@@ -187,6 +195,7 @@ export default function App() {
   }, []);
 
   const openAdminDashboard = (ownerCatId?: string, ownerMedia?: 'photo' | 'video') => {
+    void loadAdminDashboard();
     const url = new URL(window.location.href);
     url.searchParams.set('cabinet', '1');
     if (ownerCatId) url.searchParams.set('ownerCat', ownerCatId);
@@ -955,7 +964,14 @@ export default function App() {
 
       {/* --- MODALS --- */}
 
-      <Suspense fallback={null}>
+      <Suspense fallback={isAdminModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/65 p-3 backdrop-blur-sm sm:p-6">
+          <div className="flex w-full max-w-sm flex-col items-center rounded-3xl border border-stone-200 bg-white px-6 py-10 text-center shadow-2xl">
+            <div className="mb-4 h-9 w-9 animate-spin rounded-full border-4 border-amber-100 border-t-amber-500" />
+            <p className="text-sm font-bold text-stone-800">Открываем личный кабинет…</p>
+          </div>
+        </div>
+      ) : null}>
       {/* Cat Details Full Profile Modal (with Photos & Video Gallery) */}
       {selectedCatForDetail && <CatDetailModal
         cat={selectedCatForDetail}

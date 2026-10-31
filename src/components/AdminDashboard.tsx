@@ -185,7 +185,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
-  const [isCheckingSession, setIsCheckingSession] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -269,7 +269,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
         setIsAuthenticated(session.authenticated);
         setCurrentUser(user);
-        if (session.authenticated && user?.role !== 'owner') await onAuthenticated();
+        setIsCheckingSession(false);
+        if (session.authenticated && user?.role !== 'owner') {
+          void Promise.resolve(onAuthenticated()).catch(() => {});
+        }
       })
       .catch((error) => {
         if (!cancelled) setLoginError(error instanceof Error ? error.message : 'Не удалось открыть ссылку котика');
