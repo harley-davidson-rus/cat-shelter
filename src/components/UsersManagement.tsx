@@ -30,7 +30,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentU
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editRole, setEditRole] = useState<UserRole>('owner');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [staffForm, setStaffForm] = useState({ email: '', displayName: '', password: '', role: 'curator' as 'administrator' | 'curator' });
+  const [staffForm, setStaffForm] = useState({ email: '', displayName: '', password: '', passwordConfirm: '', role: 'curator' as 'administrator' | 'curator' });
   const [answeringItem, setAnsweringItem] = useState<OwnerContent | null>(null);
   const [answerText, setAnswerText] = useState('');
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
@@ -115,10 +115,14 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentU
   const createStaff = async (event: React.FormEvent) => {
     event.preventDefault();
     setMessage(null);
+    if (staffForm.password !== staffForm.passwordConfirm) {
+      setMessage({ type: 'error', text: 'Пароли не совпадают.' });
+      return;
+    }
     try {
       const created = await apiCreateStaffUser(staffForm);
       setUsers((items) => [...items, created]);
-      setStaffForm({ email: '', displayName: '', password: '', role: 'curator' });
+      setStaffForm({ email: '', displayName: '', password: '', passwordConfirm: '', role: 'curator' });
       setIsCreateOpen(false);
       setMessage({ type: 'success', text: 'Учётная запись сотрудника создана.' });
     } catch (error) { setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Не удалось создать сотрудника' }); }
@@ -268,7 +272,8 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentU
           <form onSubmit={createStaff} className="bg-white border border-stone-200 rounded-2xl p-4 grid sm:grid-cols-2 gap-3">
             <input type="email" required value={staffForm.email} onChange={(event) => setStaffForm({ ...staffForm, email: event.target.value })} placeholder="E-mail сотрудника" className="p-3 border border-stone-300 rounded-xl text-sm" />
             <input required value={staffForm.displayName} onChange={(event) => setStaffForm({ ...staffForm, displayName: event.target.value })} placeholder="Отображаемое имя" className="p-3 border border-stone-300 rounded-xl text-sm" />
-            <PasswordInput required minLength={8} maxLength={200} pattern={PASSWORD_PATTERN} title={PASSWORD_REQUIREMENTS} value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} placeholder="Временный пароль" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
+            <PasswordInput required minLength={8} maxLength={200} pattern={PASSWORD_PATTERN} title={PASSWORD_REQUIREMENTS} value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} placeholder="Пароль" aria-label="Пароль" autoComplete="new-password" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
+            <PasswordInput required minLength={8} maxLength={200} value={staffForm.passwordConfirm} onChange={(event) => setStaffForm({ ...staffForm, passwordConfirm: event.target.value })} placeholder="Подтверждение пароля" aria-label="Подтверждение пароля" autoComplete="new-password" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
             {currentRole === 'administrator' ? (
               <select value={staffForm.role} onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value as 'administrator' | 'curator' })} aria-label="Роль сотрудника" className="p-3 border border-stone-300 rounded-xl text-sm"><option value="curator">Куратор</option><option value="administrator">Администратор</option></select>
             ) : (

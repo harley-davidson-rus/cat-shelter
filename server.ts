@@ -995,9 +995,13 @@ async function startServer() {
       const input = validate(z.object({
         email: emailSchema,
         password: passwordSchema,
+        passwordConfirm: z.string().max(200),
         displayName: z.string().trim().max(120),
         role: z.enum(['administrator', 'curator']),
       }), req.body);
+      if (input.password !== input.passwordConfirm) {
+        return res.status(400).json({ error: 'Пароли не совпадают' });
+      }
       if (req.user!.role === 'curator' && input.role !== 'curator') {
         return res.status(403).json({ error: 'Куратор может создавать только других кураторов' });
       }

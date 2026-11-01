@@ -319,7 +319,7 @@ export function apiUpdateAccount(displayName: string): Promise<UserAccount> {
 
 export function apiGetUsers(): Promise<UserAccount[]> { return request('/api/users'); }
 
-export function apiCreateStaffUser(data: { email: string; password: string; displayName: string; role: Extract<UserRole, 'administrator' | 'curator'> }): Promise<UserAccount> {
+export function apiCreateStaffUser(data: { email: string; password: string; passwordConfirm: string; displayName: string; role: Extract<UserRole, 'administrator' | 'curator'> }): Promise<UserAccount> {
   return request('/api/users/staff', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   });
