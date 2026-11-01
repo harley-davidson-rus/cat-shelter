@@ -718,9 +718,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'analytics', label: 'Посещения', icon: BarChart3 },
     { id: 'database', label: 'База данных', icon: Database },
   ];
-  const adminTabs = allAdminTabs.filter((tab) => currentUser?.role === 'administrator' || !['contacts', 'stats', 'database'].includes(tab.id));
+  const adminTabs = allAdminTabs.filter((tab) => currentUser?.role === 'administrator' || tab.id !== 'database');
   const activeAdminTab = adminTabs.find((tab) => tab.id === activeTab) || adminTabs[0];
   const ActiveAdminTabIcon = activeAdminTab.icon;
+
+  React.useEffect(() => {
+    if (isAuthenticated && currentUser?.role !== 'administrator' && activeTab === 'database') {
+      setActiveTab('applications');
+    }
+  }, [activeTab, currentUser?.role, isAuthenticated]);
 
   const selectAdminTab = (tabId: AdminTabId) => {
     setActiveTab(tabId);
@@ -1148,7 +1154,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Пользователи</span>
                 </button>
 
-                {currentUser?.role === 'administrator' && <button
+                <button
                   onClick={() => setActiveTab('contacts')}
                   className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
                     activeTab === 'contacts'
@@ -1158,9 +1164,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <MapPin className="w-4 h-4" />
                   <span>Параметры</span>
-                </button>}
+                </button>
 
-                {currentUser?.role === 'administrator' && <button
+                <button
                   onClick={() => setActiveTab('stats')}
                   className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
                     activeTab === 'stats'
@@ -1170,7 +1176,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <Sparkles className="w-4 h-4" />
                   <span>Счётчики</span>
-                </button>}
+                </button>
 
                 <button
                   onClick={() => setActiveTab('analytics')}

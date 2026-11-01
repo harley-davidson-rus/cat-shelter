@@ -787,14 +787,14 @@ async function startServer() {
   app.get('/api/site-stats', async (_req, res, next) => {
     try { res.json(await getShelterStats()); } catch (error) { next(error); }
   });
-  app.put('/api/site-stats', requireAdmin, requireRole('administrator'), async (req, res, next) => {
+  app.put('/api/site-stats', requireAdmin, async (req, res, next) => {
     try { res.json(await setShelterStats(validate(shelterStatsSchema, req.body))); } catch (error) { next(error); }
   });
 
   app.get('/api/site-contacts', async (_req, res, next) => {
     try { res.json(await getSiteContacts()); } catch (error) { next(error); }
   });
-  app.put('/api/site-contacts', requireAdmin, requireRole('administrator'), async (req, res, next) => {
+  app.put('/api/site-contacts', requireAdmin, async (req, res, next) => {
     try { res.json(await setSiteContacts(validate(siteContactsSchema, req.body))); } catch (error) { next(error); }
   });
 
