@@ -272,14 +272,20 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentU
           <form onSubmit={createStaff} className="bg-white border border-stone-200 rounded-2xl p-4 grid sm:grid-cols-2 gap-3">
             <input type="email" required value={staffForm.email} onChange={(event) => setStaffForm({ ...staffForm, email: event.target.value })} placeholder="E-mail сотрудника" className="p-3 border border-stone-300 rounded-xl text-sm" />
             <input required value={staffForm.displayName} onChange={(event) => setStaffForm({ ...staffForm, displayName: event.target.value })} placeholder="Отображаемое имя" className="p-3 border border-stone-300 rounded-xl text-sm" />
-            <PasswordInput required minLength={8} maxLength={200} pattern={PASSWORD_PATTERN} title={PASSWORD_REQUIREMENTS} value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} placeholder="Пароль" aria-label="Пароль" autoComplete="new-password" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
-            <PasswordInput required minLength={8} maxLength={200} value={staffForm.passwordConfirm} onChange={(event) => setStaffForm({ ...staffForm, passwordConfirm: event.target.value })} placeholder="Подтверждение пароля" aria-label="Подтверждение пароля" autoComplete="new-password" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
+            <div>
+              <label htmlFor="staff-password" className="block text-xs font-bold text-stone-700 mb-1">Пароль</label>
+              <PasswordInput id="staff-password" required minLength={8} maxLength={200} pattern={PASSWORD_PATTERN} title={PASSWORD_REQUIREMENTS} value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} placeholder="Минимум 8 символов" autoComplete="new-password" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
+              <p className="mt-1 text-[11px] leading-relaxed text-stone-500">{PASSWORD_REQUIREMENTS}</p>
+            </div>
+            <div>
+              <label htmlFor="staff-password-confirm" className="block text-xs font-bold text-stone-700 mb-1">Подтвердите пароль</label>
+              <PasswordInput id="staff-password-confirm" required minLength={8} maxLength={200} value={staffForm.passwordConfirm} onChange={(event) => setStaffForm({ ...staffForm, passwordConfirm: event.target.value })} placeholder="Повторите пароль" autoComplete="new-password" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
+            </div>
             {currentRole === 'administrator' ? (
               <select value={staffForm.role} onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value as 'administrator' | 'curator' })} aria-label="Роль сотрудника" className="p-3 border border-stone-300 rounded-xl text-sm"><option value="curator">Куратор</option><option value="administrator">Администратор</option></select>
             ) : (
               <select value="curator" disabled aria-label="Роль сотрудника" className="p-3 border border-stone-300 rounded-xl bg-stone-100 text-stone-600 text-sm"><option value="curator">Куратор</option></select>
             )}
-            <p className="sm:col-span-2 text-[11px] text-stone-500">{PASSWORD_REQUIREMENTS}</p>
             <button className="sm:col-span-2 justify-self-start px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-bold">Создать</button>
           </form>
         )}
