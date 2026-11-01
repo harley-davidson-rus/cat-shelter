@@ -998,13 +998,13 @@ export async function updateUserProfile(email: string, displayName: string): Pro
   return result.rowCount ? accountFromRow(result.rows[0]) : null;
 }
 
-export async function listUsers(role: UserRole, currentEmail = ''): Promise<UserAccount[]> {
+export async function listUsers(role: UserRole): Promise<UserAccount[]> {
   const result = await pool.query<UserRow>(`
     SELECT email, display_name, password_hash, role, verified_at, created_at
     FROM shelter_users
-    ${role === 'curator' ? "WHERE role = 'owner' OR email = $1" : ''}
+    ${role === 'curator' ? "WHERE role IN ('owner', 'curator')" : ''}
     ORDER BY role, created_at, email
-  `, role === 'curator' ? [normalizeEmail(currentEmail)] : []);
+  `);
   return Promise.all(result.rows.map(accountFromRow));
 }
 

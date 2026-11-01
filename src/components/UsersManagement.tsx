@@ -224,7 +224,16 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentU
             <h4 className="font-heading text-xl font-black text-stone-900 flex items-center gap-2"><Users className="w-5 h-5 text-amber-600" /> Пользователи</h4>
             <p className="text-xs text-stone-500 mt-1">Управление доступом и привязкой новых хозяев к котикам.</p>
           </div>
-          {currentRole === 'administrator' && <button type="button" onClick={() => setIsCreateOpen((open) => !open)} className="px-4 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-bold flex items-center justify-center gap-2"><Plus className="w-4 h-4 text-amber-400" /> Добавить сотрудника</button>}
+          <button
+            type="button"
+            onClick={() => {
+              setIsCreateOpen((open) => !open);
+              if (currentRole === 'curator') setStaffForm((form) => ({ ...form, role: 'curator' }));
+            }}
+            className="px-4 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-bold flex items-center justify-center gap-2"
+          >
+            <Plus className="w-4 h-4 text-amber-400" /> Добавить сотрудника
+          </button>
         </div>
 
         {message && <div className={'p-3 rounded-xl text-sm flex items-center gap-2 ' + (message.type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800')}>{message.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}{message.text}</div>}
@@ -260,7 +269,11 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentU
             <input type="email" required value={staffForm.email} onChange={(event) => setStaffForm({ ...staffForm, email: event.target.value })} placeholder="E-mail сотрудника" className="p-3 border border-stone-300 rounded-xl text-sm" />
             <input required value={staffForm.displayName} onChange={(event) => setStaffForm({ ...staffForm, displayName: event.target.value })} placeholder="Отображаемое имя" className="p-3 border border-stone-300 rounded-xl text-sm" />
             <PasswordInput required minLength={8} maxLength={200} pattern={PASSWORD_PATTERN} title={PASSWORD_REQUIREMENTS} value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} placeholder="Временный пароль" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
-            <select value={staffForm.role} onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value as 'administrator' | 'curator' })} className="p-3 border border-stone-300 rounded-xl text-sm"><option value="curator">Куратор</option><option value="administrator">Администратор</option></select>
+            {currentRole === 'administrator' ? (
+              <select value={staffForm.role} onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value as 'administrator' | 'curator' })} aria-label="Роль сотрудника" className="p-3 border border-stone-300 rounded-xl text-sm"><option value="curator">Куратор</option><option value="administrator">Администратор</option></select>
+            ) : (
+              <select value="curator" disabled aria-label="Роль сотрудника" className="p-3 border border-stone-300 rounded-xl bg-stone-100 text-stone-600 text-sm"><option value="curator">Куратор</option></select>
+            )}
             <p className="sm:col-span-2 text-[11px] text-stone-500">{PASSWORD_REQUIREMENTS}</p>
             <button className="sm:col-span-2 justify-self-start px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-bold">Создать</button>
           </form>

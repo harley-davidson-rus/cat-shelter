@@ -988,9 +988,9 @@ async function startServer() {
   });
 
   app.get('/api/users', requireAdmin, async (req: ShelterRequest, res, next) => {
-    try { res.json(await listUsers(req.user!.role, req.user!.email)); } catch (error) { next(error); }
+    try { res.json(await listUsers(req.user!.role)); } catch (error) { next(error); }
   });
-  app.post('/api/users/staff', requireAdmin, requireRole('administrator'), async (req, res, next) => {
+  app.post('/api/users/staff', requireAdmin, async (req: ShelterRequest, res, next) => {
     try {
       const input = validate(z.object({
         email: emailSchema,
@@ -998,6 +998,9 @@ async function startServer() {
         displayName: z.string().trim().max(120),
         role: z.enum(['administrator', 'curator']),
       }), req.body);
+      if (req.user!.role === 'curator' && input.role !== 'curator') {
+        return res.status(403).json({ error: 'Куратор может создавать только других кураторов' });
+      }
       res.status(201).json(await createStaffUser(input.email, input.password, input.displayName, input.role));
     } catch (error) { next(error); }
   });
