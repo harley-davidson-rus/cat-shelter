@@ -5,6 +5,7 @@ import realCatPhoto from '../assets/defaultCat';
 import { compressImageFile } from '../utils/storage';
 import { apiOpenMemoPrint, apiVerifyAdminPassword, isAdminAuthenticationError } from '../utils/api';
 import { getCatStatusLabel } from '../utils/catStatus';
+import { PasswordInput } from './PasswordInput';
 
 
 interface AddEditCatModalProps {
@@ -421,8 +422,7 @@ export const AddEditCatModal: React.FC<AddEditCatModalProps> = ({
                 <h4 className="font-bold text-stone-900">Сессия куратора истекла</h4>
               </div>
               <p className="text-sm text-stone-600 mb-4">Введите пароль. После входа заполненная анкета сохранится автоматически.</p>
-              <input
-                type="password"
+              <PasswordInput
                 value={reauthPassword}
                 onChange={(event) => { setReauthPassword(event.target.value); setReauthError(''); }}
                 autoFocus

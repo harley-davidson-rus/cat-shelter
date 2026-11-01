@@ -70,6 +70,7 @@ import {
 } from '../utils/api';
 import { PASSWORD_PATTERN, PASSWORD_REQUIREMENTS } from '../utils/password';
 import { OwnerDashboard } from './OwnerDashboard';
+import { PasswordInput } from './PasswordInput';
 import { UsersManagement } from './UsersManagement';
 
 interface AdminDashboardProps {
@@ -830,8 +831,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <label className="block text-xs font-bold text-stone-700 mb-1">
                     Текущий пароль
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={oldPasswordInput}
                     onChange={(e) => setOldPasswordInput(e.target.value)}
                     placeholder="Введите старый пароль"
@@ -844,8 +844,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <label className="block text-xs font-bold text-stone-700 mb-1">
                     Новый пароль
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={newPasswordInput}
                     onChange={(e) => setNewPasswordInput(e.target.value)}
                     minLength={8}
@@ -863,8 +862,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <label className="block text-xs font-bold text-stone-700 mb-1">
                     Подтвердите новый пароль
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={newPasswordConfirm}
                     onChange={(e) => setNewPasswordConfirm(e.target.value)}
                     placeholder="Повторите новый пароль"
@@ -971,13 +969,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {!['forgot'].includes(authMode) && <div className="mt-3">
                   <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Пароль</label>
                   <div className="relative">
-                    <input ref={passwordInputRef} type="password" value={passwordInput} onChange={(event) => { setPasswordInput(event.target.value); setLoginError(''); }} minLength={['register', 'reset'].includes(authMode) ? 8 : undefined} maxLength={['register', 'reset'].includes(authMode) ? 200 : undefined} pattern={['register', 'reset'].includes(authMode) ? PASSWORD_PATTERN : undefined} title={['register', 'reset'].includes(authMode) ? PASSWORD_REQUIREMENTS : undefined} required className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                    <PasswordInput ref={passwordInputRef} value={passwordInput} onChange={(event) => { setPasswordInput(event.target.value); setLoginError(''); }} minLength={['register', 'reset'].includes(authMode) ? 8 : undefined} maxLength={['register', 'reset'].includes(authMode) ? 200 : undefined} pattern={['register', 'reset'].includes(authMode) ? PASSWORD_PATTERN : undefined} title={['register', 'reset'].includes(authMode) ? PASSWORD_REQUIREMENTS : undefined} required className="w-full pl-10 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
                     <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
                   </div>
                 </div>}
                 {['register', 'reset'].includes(authMode) && <div className="mt-3">
                   <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Подтверждение пароля</label>
-                  <input type="password" value={passwordConfirmInput} onChange={(event) => setPasswordConfirmInput(event.target.value)} placeholder="Повторите пароль" className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  <PasswordInput value={passwordConfirmInput} onChange={(event) => setPasswordConfirmInput(event.target.value)} placeholder="Повторите пароль" className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
                   <p className="mt-1.5 text-[11px] text-stone-500">{PASSWORD_REQUIREMENTS}</p>
                 </div>}
                 {authMessage && <p className="mt-3 p-3 rounded-xl bg-emerald-50 text-xs text-emerald-800 text-left break-words">{authMessage}</p>}
