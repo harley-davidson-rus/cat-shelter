@@ -112,6 +112,40 @@ interface AdminDashboardProps {
 
 type AdminTabId = 'applications' | 'cats' | 'articles' | 'users' | 'stats' | 'contacts' | 'analytics' | 'database';
 
+const DEFAULT_ADMIN_TAB: AdminTabId = 'applications';
+const ADMIN_TAB_STORAGE_PREFIX = 'shelter:admin-dashboard-tab:';
+const ADMIN_TAB_IDS: ReadonlySet<AdminTabId> = new Set([
+  'applications',
+  'cats',
+  'articles',
+  'users',
+  'stats',
+  'contacts',
+  'analytics',
+  'database',
+]);
+
+const getAdminTabStorageKey = (email: string) => `${ADMIN_TAB_STORAGE_PREFIX}${email.trim().toLowerCase()}`;
+
+const getSavedAdminTab = (user: UserAccount): AdminTabId => {
+  try {
+    const savedTab = window.localStorage.getItem(getAdminTabStorageKey(user.email));
+    if (!savedTab || !ADMIN_TAB_IDS.has(savedTab as AdminTabId)) return DEFAULT_ADMIN_TAB;
+    if (savedTab === 'database' && user.role !== 'administrator') return DEFAULT_ADMIN_TAB;
+    return savedTab as AdminTabId;
+  } catch {
+    return DEFAULT_ADMIN_TAB;
+  }
+};
+
+const saveAdminTab = (user: UserAccount, tabId: AdminTabId) => {
+  try {
+    window.localStorage.setItem(getAdminTabStorageKey(user.email), tabId);
+  } catch {
+    // The selected tab still works when browser storage is unavailable.
+  }
+};
+
 const creationTimestamp = (createdAt?: string): number => {
   const timestamp = createdAt ? Date.parse(createdAt) : Number.NaN;
   return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
@@ -200,7 +234,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [resetToken, setResetToken] = useState('');
   const [inviteCatId, setInviteCatId] = useState('');
   const [inviteSignature, setInviteSignature] = useState('');
-  const [activeTab, setActiveTab] = useState<AdminTabId>('applications');
+  const [activeTab, setActiveTab] = useState<AdminTabId>(DEFAULT_ADMIN_TAB);
   const [isMobileTabMenuOpen, setIsMobileTabMenuOpen] = useState(false);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
@@ -754,12 +788,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const ActiveAdminTabIcon = activeAdminTab.icon;
 
   React.useEffect(() => {
-    if (isAuthenticated && currentUser?.role !== 'administrator' && activeTab === 'database') {
-      setActiveTab('applications');
-    }
-  }, [activeTab, currentUser?.role, isAuthenticated]);
+    if (!isAuthenticated || !currentUser || currentUser.role === 'owner') return;
+    setActiveTab(getSavedAdminTab(currentUser));
+  }, [currentUser?.email, currentUser?.role, isAuthenticated]);
 
   const selectAdminTab = (tabId: AdminTabId) => {
+    if (currentUser && currentUser.role !== 'owner') saveAdminTab(currentUser, tabId);
     setActiveTab(tabId);
     setIsMobileTabMenuOpen(false);
   };
@@ -1107,7 +1141,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <div className="hidden lg:grid grid-cols-8 gap-2 w-full">
                 <button
-                  onClick={() => setActiveTab('applications')}
+                  onClick={() => selectAdminTab('applications')}
                   title="Заявки на усыновление"
                   className={`min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
                     activeTab === 'applications'
@@ -1129,7 +1163,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('cats')}
+                  onClick={() => selectAdminTab('cats')}
                   title="Каталог котиков"
                   className={`min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
                     activeTab === 'cats'
@@ -1151,7 +1185,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('articles')}
+                  onClick={() => selectAdminTab('articles')}
                   title="Новости и истории"
                   className={`min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
                     activeTab === 'articles'
@@ -1173,7 +1207,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('users')}
+                  onClick={() => selectAdminTab('users')}
                   className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
                     activeTab === 'users' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-100'
                   )}
@@ -1183,7 +1217,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('contacts')}
+                  onClick={() => selectAdminTab('contacts')}
                   className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
                     activeTab === 'contacts'
                       ? 'bg-amber-500 text-white shadow-sm'
@@ -1195,7 +1229,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('stats')}
+                  onClick={() => selectAdminTab('stats')}
                   className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
                     activeTab === 'stats'
                       ? 'bg-amber-500 text-white shadow-sm'
@@ -1207,7 +1241,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('analytics')}
+                  onClick={() => selectAdminTab('analytics')}
                   className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
                     activeTab === 'analytics'
                       ? 'bg-amber-500 text-white shadow-sm'
@@ -1219,7 +1253,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
 
                 {currentUser?.role === 'administrator' && <button
-                  onClick={() => setActiveTab('database')}
+                  onClick={() => selectAdminTab('database')}
                   title="База данных"
                   className={`min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
                     activeTab === 'database'
