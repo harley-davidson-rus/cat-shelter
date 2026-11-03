@@ -2,8 +2,10 @@ import type { DatabaseBackupSettings } from '../src/types';
 import { getDatabaseBackupSettings } from './db';
 import {
   createScheduledPostgresBackup,
+  getBackupDiskFreeSpace,
   listScheduledPostgresBackups,
   pruneScheduledPostgresBackups,
+  type ScheduledBackupFile,
 } from './postgresBackup';
 
 export interface DatabaseBackupScheduleStatus extends DatabaseBackupSettings {
@@ -15,6 +17,9 @@ export interface DatabaseBackupScheduleStatus extends DatabaseBackupSettings {
   lastFileName: string | null;
   lastError: string | null;
   storedBackupsCount: number;
+  storedBackups: ScheduledBackupFile[];
+  storedBackupsTotalSizeBytes: number;
+  diskFreeSpaceBytes: number | null;
 }
 
 let currentSettings: DatabaseBackupSettings = {
@@ -84,6 +89,7 @@ export async function reloadAutomaticBackupScheduler(): Promise<DatabaseBackupSc
 
 export async function getAutomaticBackupStatus(): Promise<DatabaseBackupScheduleStatus> {
   const files = await listScheduledPostgresBackups(currentSettings.directory);
+  const diskFreeSpaceBytes = await getBackupDiskFreeSpace(currentSettings.directory);
   const latest = files[0];
   return {
     ...currentSettings,
@@ -95,6 +101,9 @@ export async function getAutomaticBackupStatus(): Promise<DatabaseBackupSchedule
     lastFileName: lastFileName || latest?.fileName || null,
     lastError,
     storedBackupsCount: files.length,
+    storedBackups: files,
+    storedBackupsTotalSizeBytes: files.reduce((total, file) => total + file.sizeBytes, 0),
+    diskFreeSpaceBytes,
   };
 }
 

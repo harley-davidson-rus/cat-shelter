@@ -560,6 +560,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }).format(new Date(value));
   };
 
+  const formatFileSize = (sizeBytes: number | null | undefined) => {
+    if (sizeBytes === null || sizeBytes === undefined || !Number.isFinite(sizeBytes) || sizeBytes < 0) {
+      return 'неизвестно';
+    }
+    const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+    let value = sizeBytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+    return `${new Intl.NumberFormat('ru-RU', {
+      minimumFractionDigits: unitIndex === 0 ? 0 : 1,
+      maximumFractionDigits: unitIndex === 0 ? 0 : 2,
+    }).format(value)} ${units[unitIndex]}`;
+  };
+
+  const formatBackupFilesCount = (count: number) => {
+    const mod100 = count % 100;
+    const mod10 = count % 10;
+    const word = mod100 >= 11 && mod100 <= 14
+      ? 'файлов'
+      : mod10 === 1
+        ? 'файл'
+        : mod10 >= 2 && mod10 <= 4
+          ? 'файла'
+          : 'файлов';
+    return `${count} ${word}`;
+  };
+
   if (!isOpen) return null;
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -2207,22 +2237,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     {backupSchedule && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-stone-600">
-                        <div className="rounded-lg border border-stone-200/80 bg-white/80 px-3 py-2">
-                          <span className="block text-stone-400">Следующий запуск</span>
-                          <strong className="font-semibold text-stone-700">
-                            {backupSchedule.isRunning ? 'Выполняется сейчас…' : formatBackupDate(backupSchedule.nextRunAt)}
-                          </strong>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-stone-600">
+                          <div className="rounded-lg border border-stone-200/80 bg-white/80 px-3 py-2">
+                            <span className="block text-stone-400">Следующий запуск</span>
+                            <strong className="font-semibold text-stone-700">
+                              {backupSchedule.isRunning ? 'Выполняется сейчас…' : formatBackupDate(backupSchedule.nextRunAt)}
+                            </strong>
+                          </div>
+                          <div className="rounded-lg border border-stone-200/80 bg-white/80 px-3 py-2">
+                            <span className="block text-stone-400">Последняя успешная копия</span>
+                            <strong className="font-semibold text-stone-700">{formatBackupDate(backupSchedule.lastSuccessAt)}</strong>
+                          </div>
+                          <div className="rounded-lg border border-stone-200/80 bg-white/80 px-3 py-2">
+                            <span className="block text-stone-400">Архивов на сервере</span>
+                            <strong className="font-semibold text-stone-700">
+                              {backupSchedule.storedBackupsCount} из {backupSchedule.retentionCount}
+                            </strong>
+                          </div>
                         </div>
-                        <div className="rounded-lg border border-stone-200/80 bg-white/80 px-3 py-2">
-                          <span className="block text-stone-400">Последняя успешная копия</span>
-                          <strong className="font-semibold text-stone-700">{formatBackupDate(backupSchedule.lastSuccessAt)}</strong>
-                        </div>
-                        <div className="rounded-lg border border-stone-200/80 bg-white/80 px-3 py-2">
-                          <span className="block text-stone-400">Архивов на сервере</span>
-                          <strong className="font-semibold text-stone-700">
-                            {backupSchedule.storedBackupsCount} из {backupSchedule.retentionCount}
-                          </strong>
+
+                        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white/90">
+                          <div className="flex items-center justify-between gap-3 border-b border-stone-100 px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <HardDrive className="h-4 w-4 text-amber-600" />
+                              <span className="text-xs font-bold text-stone-800">Созданные резервные копии</span>
+                            </div>
+                            <span className="text-[10px] font-semibold text-stone-400">
+                              {formatBackupFilesCount(backupSchedule.storedBackupsCount)}
+                            </span>
+                          </div>
+
+                          {backupSchedule.storedBackups.length > 0 ? (
+                            <div className="max-h-56 divide-y divide-stone-100 overflow-y-auto">
+                              {backupSchedule.storedBackups.map((file) => (
+                                <div key={file.fileName} className="flex items-start justify-between gap-3 px-3 py-2.5 text-[11px]">
+                                  <div className="min-w-0">
+                                    <div className="break-all font-mono font-semibold text-stone-700" title={file.fileName}>
+                                      {file.fileName}
+                                    </div>
+                                    <div className="mt-0.5 text-stone-400">
+                                      Создан: {formatBackupDate(file.createdAt)}
+                                    </div>
+                                  </div>
+                                  <strong className="shrink-0 whitespace-nowrap font-semibold text-stone-700">
+                                    {formatFileSize(file.sizeBytes)}
+                                  </strong>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="px-3 py-5 text-center text-xs text-stone-400">
+                              Автоматические резервные копии ещё не созданы.
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 gap-px border-t border-stone-200 bg-stone-200 sm:grid-cols-2">
+                            <div className="bg-stone-50 px-3 py-2.5 text-[11px]">
+                              <span className="block text-stone-400">Общий объём архивов</span>
+                              <strong className="font-semibold text-stone-700">
+                                {formatFileSize(backupSchedule.storedBackupsTotalSizeBytes)}
+                              </strong>
+                            </div>
+                            <div className="bg-stone-50 px-3 py-2.5 text-[11px]">
+                              <span className="block text-stone-400">Свободно на диске</span>
+                              <strong className="font-semibold text-stone-700">
+                                {formatFileSize(backupSchedule.diskFreeSpaceBytes)}
+                              </strong>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}

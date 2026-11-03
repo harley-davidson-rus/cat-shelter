@@ -113,6 +113,10 @@ export interface ScheduledBackupFile {
   sizeBytes: number;
 }
 
+function backupFileCreatedAt(stats: fs.Stats): string {
+  return (stats.birthtimeMs > 0 ? stats.birthtime : stats.mtime).toISOString();
+}
+
 export interface ServerDirectoryListing {
   currentPath: string | null;
   parentPath: string | null;
@@ -217,9 +221,24 @@ export async function listScheduledPostgresBackups(directory: string): Promise<S
     .filter((entry) => entry.isFile() && /^cat_shelter_auto_.+\.backup$/.test(entry.name))
     .map(async (entry) => {
       const stats = await fs.promises.stat(path.join(directory, entry.name));
-      return { fileName: entry.name, createdAt: stats.mtime.toISOString(), sizeBytes: stats.size };
+      return { fileName: entry.name, createdAt: backupFileCreatedAt(stats), sizeBytes: stats.size };
     }));
   return files.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+export async function getBackupDiskFreeSpace(directory: string): Promise<number | null> {
+  let candidate = path.resolve(directory);
+  while (true) {
+    try {
+      const stats = await fs.promises.statfs(candidate);
+      return stats.bavail * stats.bsize;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const parent = path.dirname(candidate);
+      if (code !== 'ENOENT' || parent === candidate) return null;
+      candidate = parent;
+    }
+  }
 }
 
 export async function pruneScheduledPostgresBackups(retentionCount: number, directory: string): Promise<void> {
@@ -248,7 +267,7 @@ export async function createScheduledPostgresBackup(retentionCount: number, dire
     await fs.promises.rename(partialPath, outputPath);
     await pruneScheduledPostgresBackups(retentionCount, directory);
     const stats = await fs.promises.stat(outputPath);
-    return { fileName, createdAt: stats.mtime.toISOString(), sizeBytes: stats.size };
+    return { fileName, createdAt: backupFileCreatedAt(stats), sizeBytes: stats.size };
   } catch (error) {
     await fs.promises.unlink(partialPath).catch(() => {});
     throw error;

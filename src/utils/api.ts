@@ -27,6 +27,13 @@ export interface DatabaseBackupScheduleStatus {
   lastFileName: string | null;
   lastError: string | null;
   storedBackupsCount: number;
+  storedBackups: Array<{
+    fileName: string;
+    createdAt: string;
+    sizeBytes: number;
+  }>;
+  storedBackupsTotalSizeBytes: number;
+  diskFreeSpaceBytes: number | null;
 }
 
 export interface ServerDirectoryListing {
