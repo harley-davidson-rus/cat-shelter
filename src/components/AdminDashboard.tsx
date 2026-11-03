@@ -2269,7 +2269,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
 
                           {backupSchedule.storedBackups.length > 0 ? (
-                            <div className="max-h-56 divide-y divide-stone-100 overflow-y-auto">
+                            <div className="divide-y divide-stone-100">
                               {backupSchedule.storedBackups.map((file) => (
                                 <div key={file.fileName} className="flex items-start justify-between gap-3 px-3 py-2.5 text-[11px]">
                                   <div className="min-w-0">
