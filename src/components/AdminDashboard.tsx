@@ -2109,14 +2109,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* TAB 7: PostgreSQL database management */}
             {activeTab === 'database' && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-                {/* Status Hero Card */}
-                <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-stone-900 to-stone-950 text-white border border-stone-800 shadow-xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                    <Database className="w-48 h-48 text-amber-400" />
+                {/* Database status */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-stone-900 to-stone-950 text-white border border-stone-800 shadow-xl relative overflow-hidden">
+                  <div className="absolute -top-5 right-2 opacity-10 pointer-events-none">
+                    <Database className="w-20 h-20 text-amber-400" />
                   </div>
 
                   <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                         PostgreSQL подключена
@@ -2125,15 +2125,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         База: {serverStats?.database || 'загрузка…'}
                       </span>
                     </div>
-
-                    <h4 className="font-heading text-lg sm:text-xl font-black text-white mb-2">
-                      Единое хранилище данных и медиа
-                    </h4>
-                    <p className="text-xs sm:text-sm text-stone-300 max-w-2xl leading-relaxed">
-                      Анкеты котиков, фотографии, загруженные видео, заявки усыновителей, новости и настройки хранятся
-                      в PostgreSQL, а не в кеше браузера или JSON-файле. Сайт показывает актуальные данные с любого
-                      устройства, а нативная резервная копия PostgreSQL включает как записи, так и все медиафайлы.
-                    </p>
                   </div>
                 </div>
 
