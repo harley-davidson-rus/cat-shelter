@@ -38,7 +38,7 @@ import {
   startAutomaticBackupScheduler,
 } from './server/backupScheduler';
 import { ensureBrowserCompatibleVideo } from './server/videoTranscode';
-import type { Cat, OwnerContent, ShelterArticle, UserAccount, UserRole } from './src/types';
+import type { Cat, OwnerContent, ShelterArticle, SiteContacts, UserAccount, UserRole } from './src/types';
 import {
   articleSeoPath,
   articleTagPath,
@@ -261,6 +261,8 @@ function resolvePublicOrigin(): string {
 }
 
 const PUBLIC_ORIGIN = resolvePublicOrigin();
+const ORGANIZATION_ID = PUBLIC_ORIGIN + '/#organization';
+const WEBSITE_ID = PUBLIC_ORIGIN + '/#website';
 
 async function sendTransactionalEmail(to: string, subject: string, text: string): Promise<void> {
   const webhook = process.env.EMAIL_DELIVERY_WEBHOOK;
@@ -336,15 +338,120 @@ type SeoPage = {
   tagLinks?: Array<{ label: string; url: string }>;
   relatedLinks?: Array<{ label: string; description: string; url: string }>;
   indexable?: boolean;
-  structuredData: Record<string, unknown>;
+  datePublished?: string;
+  dateModified?: string;
+  structuredData: Array<Record<string, unknown>>;
 };
 
-function renderSeoDocument(template: string, page: SeoPage): string {
+function normalizeSeoDate(value?: string): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  const russianDate = normalized.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (russianDate) {
+    return `${russianDate[3]}-${russianDate[2].padStart(2, '0')}-${russianDate[1].padStart(2, '0')}`;
+  }
+  const timestamp = Date.parse(normalized);
+  if (!Number.isFinite(timestamp)) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+  return new Date(timestamp).toISOString();
+}
+
+function publicHttpUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function organizationStructuredData(contacts: SiteContacts): Record<string, unknown> {
+  const sameAs = [
+    contacts.telegramUrl,
+    contacts.maxUrl,
+    contacts.vkUrl,
+    contacts.youtubeUrl,
+    contacts.rutubeUrl,
+  ].map(publicHttpUrl).filter((url): url is string => Boolean(url));
+  return {
+    '@type': ['Organization', 'AnimalShelter'],
+    '@id': ORGANIZATION_ID,
+    name: 'Фонд помощи животным «Доброта для кота»',
+    alternateName: 'Доброта для кота',
+    url: PUBLIC_ORIGIN + '/',
+    logo: {
+      '@type': 'ImageObject',
+      '@id': PUBLIC_ORIGIN + '/#logo',
+      url: PUBLIC_ORIGIN + '/favicon.svg',
+      contentUrl: PUBLIC_ORIGIN + '/favicon.svg',
+      width: 120,
+      height: 120,
+    },
+    image: PUBLIC_ORIGIN + '/default_cat.jpg',
+    description: 'Фонд помощи животным: лечение, социализация и устройство котиков в ответственные семьи.',
+    ...(contacts.phone ? { telephone: contacts.phone } : {}),
+    address: {
+      '@type': 'PostalAddress',
+      addressLocality: 'Санкт-Петербург',
+      addressCountry: 'RU',
+    },
+    areaServed: { '@type': 'City', name: 'Санкт-Петербург' },
+    ...(sameAs.length ? { sameAs } : {}),
+  };
+}
+
+function websiteStructuredData(): Record<string, unknown> {
+  return {
+    '@type': 'WebSite',
+    '@id': WEBSITE_ID,
+    url: PUBLIC_ORIGIN + '/',
+    name: 'Доброта для кота',
+    alternateName: 'Фонд помощи животным «Доброта для кота»',
+    inLanguage: 'ru-RU',
+    publisher: { '@id': ORGANIZATION_ID },
+  };
+}
+
+function breadcrumbStructuredData(canonical: string, currentName: string): Record<string, unknown> {
+  return {
+    '@type': 'BreadcrumbList',
+    '@id': canonical + '#breadcrumb',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Главная',
+        item: PUBLIC_ORIGIN + '/',
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: currentName,
+        item: canonical,
+      },
+    ],
+  };
+}
+
+function replaceStructuredData(
+  template: string,
+  contacts: SiteContacts,
+  pageNodes: Array<Record<string, unknown>>,
+): string {
+  const structuredData = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@graph': [organizationStructuredData(contacts), websiteStructuredData(), ...pageNodes],
+  }).replace(/<\//g, '<\\/');
+  const script = '<script type="application/ld+json">' + structuredData + '</script>';
+  return template.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/i, script);
+}
+
+function renderSeoDocument(template: string, page: SeoPage, contacts: SiteContacts): string {
   const title = escapeHtml(page.title);
   const description = escapeHtml(page.description);
   const canonical = escapeHtml(page.canonical);
   const image = escapeHtml(page.image);
-  const structuredData = JSON.stringify(page.structuredData).replace(/<\//g, '<\\/');
   const keywords = (page.keywords || []).map(normalizeArticleTag).filter(Boolean);
   const tags = page.tagLinks?.length
     ? '<nav aria-label="Темы публикации" style="display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0">' + page.tagLinks.map((tag) =>
@@ -371,23 +478,36 @@ function renderSeoDocument(template: string, page: SeoPage): string {
     '</section>',
   ].join('');
 
-  return template
+  const articleMeta = page.pageType === 'article'
+    ? [
+        page.datePublished ? '<meta property="article:published_time" content="' + escapeHtml(page.datePublished) + '" />' : '',
+        page.dateModified ? '<meta property="article:modified_time" content="' + escapeHtml(page.dateModified) + '" />' : '',
+      ].filter(Boolean).join('')
+    : '';
+  const document = template
     .replace(/<title>[\s\S]*?<\/title>/i, '<title>' + title + '</title>')
     .replace(/<meta name="description"[^>]*>/i, '<meta name="description" content="' + description + '" />')
     .replace(/<meta name="robots"[^>]*>/i, '<meta name="robots" content="' + robots + '" />')
     .replace(/<meta name="googlebot"[^>]*>/i, '<meta name="googlebot" content="' + robots + '" />')
     .replace(/<meta name="yandex"[^>]*>/i, '<meta name="yandex" content="' + (page.indexable === false ? 'noindex, follow' : 'index, follow') + '" />')
     .replace(/<link rel="canonical"[^>]*>/i, '<link rel="canonical" href="' + canonical + '" />')
+    .replace(/<link rel="alternate" hreflang="ru-RU"[^>]*>/i, '<link rel="alternate" hreflang="ru-RU" href="' + canonical + '" />')
+    .replace(/<link rel="alternate" hreflang="x-default"[^>]*>/i, '<link rel="alternate" hreflang="x-default" href="' + canonical + '" />')
     .replace(/<meta property="og:title"[^>]*>/i, '<meta property="og:title" content="' + title + '" />')
     .replace(/<meta property="og:description"[^>]*>/i, '<meta property="og:description" content="' + description + '" />')
     .replace(/<meta property="og:type"[^>]*>/i, '<meta property="og:type" content="' + (page.pageType === 'article' ? 'article' : 'website') + '" />')
     .replace(/<meta property="og:url"[^>]*>/i, '<meta property="og:url" content="' + canonical + '" />')
     .replace(/<meta property="og:image"[^>]*>/i, '<meta property="og:image" content="' + image + '" />')
-    .replace('</head>', (keywords.length ? '<meta name="keywords" content="' + escapeHtml(keywords.join(', ')) + '" />' : '') + '<script type="application/ld+json">' + structuredData + '</script></head>')
+    .replace(/<meta property="og:image:alt"[^>]*>/i, '<meta property="og:image:alt" content="' + escapeHtml(page.heading) + '" />')
+    .replace(/<meta name="twitter:title"[^>]*>/i, '<meta name="twitter:title" content="' + title + '" />')
+    .replace(/<meta name="twitter:description"[^>]*>/i, '<meta name="twitter:description" content="' + description + '" />')
+    .replace(/<meta name="twitter:image"[^>]*>/i, '<meta name="twitter:image" content="' + image + '" />')
+    .replace('</head>', articleMeta + (keywords.length ? '<meta name="keywords" content="' + escapeHtml(keywords.join(', ')) + '" />' : '') + '</head>')
     .replace('<div id="root"></div>', prerender + '<div id="root"></div>');
+  return replaceStructuredData(document, contacts, page.structuredData);
 }
 
-function renderHomeSeoDocument(template: string, cats: Cat[], articles: ShelterArticle[]): string {
+function renderHomeSeoDocument(template: string, cats: Cat[], articles: ShelterArticle[], contacts: SiteContacts): string {
   const catLinks = cats.map((cat) =>
     '<li><a href="' + escapeHtml(catSeoPath(cat, cats)) + '">' + escapeHtml(cat.name) + '</a></li>'
   ).join('');
@@ -402,7 +522,22 @@ function renderHomeSeoDocument(template: string, cats: Cat[], articles: ShelterA
     '<section><h2>Новости и истории</h2><ul>', articleLinks, '</ul></section>',
     '</main>',
   ].join('');
-  return template.replace('<div id="root"></div>', prerender + '<div id="root"></div>');
+  const homePage = {
+    '@type': 'WebPage',
+    '@id': PUBLIC_ORIGIN + '/#webpage',
+    url: PUBLIC_ORIGIN + '/',
+    name: 'Взять котика из приюта в Санкт-Петербурге — Доброта для кота',
+    description: 'Котики из фонда помощи животным «Доброта для кота» ищут семью в Санкт-Петербурге. Посмотрите анкеты и подайте заявку на усыновление.',
+    isPartOf: { '@id': WEBSITE_ID },
+    about: { '@id': ORGANIZATION_ID },
+    primaryImageOfPage: PUBLIC_ORIGIN + '/default_cat.jpg',
+    inLanguage: 'ru-RU',
+  };
+  return replaceStructuredData(
+    template.replace('<div id="root"></div>', prerender + '<div id="root"></div>'),
+    contacts,
+    [homePage],
+  );
 }
 
 function renderCatGameDemoDocument(template: string): string {
@@ -440,22 +575,35 @@ function catSeoPage(cat: Cat, cats: Cat[]): SeoPage {
     heading: cat.name + ' ищет дом',
     eyebrow: 'Анкета подопечного фонда «Доброта для кота»',
     body: description,
-    structuredData: {
-      '@context': 'https://schema.org',
-      '@type': 'WebPage',
-      name: cat.name + ' ищет дом',
-      description,
-      url: canonical,
-      primaryImageOfPage: image,
-      about: {
-        '@type': 'Thing',
-        name: cat.name,
+    structuredData: [
+      {
+        '@type': 'WebPage',
+        '@id': canonical + '#webpage',
+        name: cat.name + ' ищет дом',
         description,
-        image,
+        url: canonical,
+        primaryImageOfPage: image,
+        about: {
+          '@type': 'Thing',
+          '@id': canonical + '#cat',
+          name: cat.name,
+          description,
+          image,
+        },
+        breadcrumb: { '@id': canonical + '#breadcrumb' },
+        isPartOf: { '@id': WEBSITE_ID },
+        inLanguage: 'ru-RU',
       },
-      isPartOf: { '@type': 'WebSite', name: 'Доброта для кота', url: PUBLIC_ORIGIN + '/' },
-    },
+      breadcrumbStructuredData(canonical, cat.name + ' ищет дом'),
+    ],
   };
+}
+
+function articleAuthorStructuredData(author: string): Record<string, unknown> {
+  if (/(?:команда|фонд|доброта\s+для\s+кота)/iu.test(author)) {
+    return { '@id': ORGANIZATION_ID };
+  }
+  return { '@type': 'Person', name: author };
 }
 
 function articleSeoPage(article: ShelterArticle, articles: ShelterArticle[]): SeoPage {
@@ -463,6 +611,8 @@ function articleSeoPage(article: ShelterArticle, articles: ShelterArticle[]): Se
   const description = plainText(article.summary || article.content);
   const body = plainText(article.content, 1000) || description;
   const image = publicImageUrl(article.coverImage);
+  const datePublished = normalizeSeoDate(article.publishedAt) || normalizeSeoDate(article.createdAt);
+  const dateModified = normalizeSeoDate(article.updatedAt) || datePublished;
   const tags = Array.from(new Map(
     (article.tags || [])
       .map(normalizeArticleTag)
@@ -479,23 +629,39 @@ function articleSeoPage(article: ShelterArticle, articles: ShelterArticle[]): Se
     eyebrow: 'Новости и истории фонда «Доброта для кота»',
     body,
     keywords: tags,
+    datePublished,
+    dateModified,
     tagLinks: tags.map((tag) => ({ label: tag, url: articleTagPath(tag) })),
-    structuredData: {
-      '@context': 'https://schema.org',
-      '@type': 'Article',
-      headline: article.title,
-      description,
-      keywords: tags,
-      image: [image],
-      datePublished: article.publishedAt,
-      author: { '@type': 'Person', name: article.author },
-      publisher: {
-        '@type': 'Organization',
-        name: 'Доброта для кота',
-        logo: { '@type': 'ImageObject', url: PUBLIC_ORIGIN + '/favicon.svg' },
+    structuredData: [
+      {
+        '@type': 'Article',
+        '@id': canonical + '#article',
+        url: canonical,
+        headline: article.title,
+        description,
+        keywords: tags,
+        image: [image],
+        ...(datePublished ? { datePublished } : {}),
+        ...(dateModified ? { dateModified } : {}),
+        author: articleAuthorStructuredData(article.author),
+        publisher: { '@id': ORGANIZATION_ID },
+        mainEntityOfPage: { '@id': canonical + '#webpage' },
+        isPartOf: { '@id': WEBSITE_ID },
+        inLanguage: 'ru-RU',
       },
-      mainEntityOfPage: canonical,
-    },
+      {
+        '@type': 'WebPage',
+        '@id': canonical + '#webpage',
+        url: canonical,
+        name: article.title,
+        description,
+        primaryImageOfPage: image,
+        breadcrumb: { '@id': canonical + '#breadcrumb' },
+        isPartOf: { '@id': WEBSITE_ID },
+        inLanguage: 'ru-RU',
+      },
+      breadcrumbStructuredData(canonical, article.title),
+    ],
   };
 }
 
@@ -529,15 +695,20 @@ function articleTagSeoPage(tag: string, articles: ShelterArticle[]): SeoPage {
       description: plainText(article.summary, 240),
       url: articleSeoPath(article, articles),
     })),
-    structuredData: {
-      '@context': 'https://schema.org',
-      '@type': 'CollectionPage',
-      name: 'Публикации по теме ' + normalizedTag,
-      description,
-      url: canonical,
-      isPartOf: { '@type': 'WebSite', name: 'Доброта для кота', url: PUBLIC_ORIGIN + '/' },
-      mainEntity: { '@type': 'ItemList', numberOfItems: itemList.length, itemListElement: itemList },
-    },
+    structuredData: [
+      {
+        '@type': 'CollectionPage',
+        '@id': canonical + '#webpage',
+        name: 'Публикации по теме ' + normalizedTag,
+        description,
+        url: canonical,
+        isPartOf: { '@id': WEBSITE_ID },
+        breadcrumb: { '@id': canonical + '#breadcrumb' },
+        mainEntity: { '@type': 'ItemList', numberOfItems: itemList.length, itemListElement: itemList },
+        inLanguage: 'ru-RU',
+      },
+      breadcrumbStructuredData(canonical, 'Публикации по теме ' + normalizedTag),
+    ],
   };
 }
 
@@ -1255,11 +1426,11 @@ send.addEventListener('click',async()=>{if(!selectedFile)return;send.disabled=tr
     const indexTemplate = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
     app.get('/', async (_req, res, next) => {
       try {
-        const [cats, articles] = await Promise.all([getAllCats(), getAllArticles()]);
+        const [cats, articles, contacts] = await Promise.all([getAllCats(), getAllArticles(), getSiteContacts()]);
         res
           .set('Cache-Control', 'public, max-age=300')
           .type('text/html')
-          .send(renderHomeSeoDocument(indexTemplate, cats, articles));
+          .send(renderHomeSeoDocument(indexTemplate, cats, articles, contacts));
       } catch (error) {
         next(error);
       }
@@ -1272,7 +1443,7 @@ send.addEventListener('click',async()=>{if(!selectedFile)return;send.disabled=tr
     });
     app.get('/news/tag/:tag', async (req, res, next) => {
       try {
-        const articles = await getAllArticles();
+        const [articles, contacts] = await Promise.all([getAllArticles(), getSiteContacts()]);
         const tag = findArticleTagBySlug(req.params.tag, articles);
         if (!tag) {
           res.status(404).type('text/plain').send('Тема не найдена');
@@ -1281,14 +1452,14 @@ send.addEventListener('click',async()=>{if(!selectedFile)return;send.disabled=tr
         res
           .set('Cache-Control', 'public, max-age=300')
           .type('text/html')
-          .send(renderSeoDocument(indexTemplate, articleTagSeoPage(tag, articles)));
+          .send(renderSeoDocument(indexTemplate, articleTagSeoPage(tag, articles), contacts));
       } catch (error) {
         next(error);
       }
     });
     app.get(['/cats/:slug', '/news/:slug'], async (req, res, next) => {
       try {
-        const [cats, articles] = await Promise.all([getAllCats(), getAllArticles()]);
+        const [cats, articles, contacts] = await Promise.all([getAllCats(), getAllArticles(), getSiteContacts()]);
         let page: SeoPage | null = null;
         if (req.path.startsWith('/cats/')) {
           const cat = findBySeoSlug(req.params.slug, cats, (candidate) => candidate.name, 'kotik');
@@ -1304,7 +1475,7 @@ send.addEventListener('click',async()=>{if(!selectedFile)return;send.disabled=tr
         res
           .set('Cache-Control', 'public, max-age=300')
           .type('text/html')
-          .send(renderSeoDocument(indexTemplate, page));
+          .send(renderSeoDocument(indexTemplate, page, contacts));
       } catch (error) {
         next(error);
       }

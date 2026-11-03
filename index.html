@@ -32,22 +32,47 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "AnimalShelter",
-        "name": "Фонд помощи животным «Доброта для кота»",
-        "alternateName": "Доброта для кота",
-        "url": "https://kind4cat.ru/",
-        "logo": "https://kind4cat.ru/favicon.svg",
-        "image": "https://kind4cat.ru/default_cat.jpg",
-        "description": "Фонд помощи животным: лечение, социализация и устройство котиков в ответственные семьи.",
-        "telephone": "+7 921 941-09-82",
-        "address": {
-          "@type": "PostalAddress",
-          "addressLocality": "Санкт-Петербург",
-          "addressCountry": "RU"
-        },
-        "sameAs": [
-          "https://t.me/maythecatbewithyou",
-          "https://rutube.ru/channel/82015606"
+        "@graph": [
+          {
+            "@type": ["Organization", "AnimalShelter"],
+            "@id": "https://kind4cat.ru/#organization",
+            "name": "Фонд помощи животным «Доброта для кота»",
+            "alternateName": "Доброта для кота",
+            "url": "https://kind4cat.ru/",
+            "logo": {
+              "@type": "ImageObject",
+              "@id": "https://kind4cat.ru/#logo",
+              "url": "https://kind4cat.ru/favicon.svg",
+              "contentUrl": "https://kind4cat.ru/favicon.svg",
+              "width": 120,
+              "height": 120
+            },
+            "image": "https://kind4cat.ru/default_cat.jpg",
+            "description": "Фонд помощи животным: лечение, социализация и устройство котиков в ответственные семьи.",
+            "telephone": "+7 921 941-09-82",
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": "Санкт-Петербург",
+              "addressCountry": "RU"
+            },
+            "areaServed": { "@type": "City", "name": "Санкт-Петербург" },
+            "sameAs": [
+              "https://t.me/maythecatbewithyou",
+              "https://max.ru/channel_dobrotadylakota",
+              "https://vk.ru/dobrota_dlya_kota",
+              "https://www.youtube.com/@dobrota_d_kota",
+              "https://rutube.ru/channel/82015606"
+            ]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://kind4cat.ru/#website",
+            "url": "https://kind4cat.ru/",
+            "name": "Доброта для кота",
+            "alternateName": "Фонд помощи животным «Доброта для кота»",
+            "inLanguage": "ru-RU",
+            "publisher": { "@id": "https://kind4cat.ru/#organization" }
+          }
         ]
       }
     </script>
