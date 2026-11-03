@@ -26,7 +26,9 @@ export const ArticleContent: React.FC<ArticleContentProps> = ({ content }) => {
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="font-semibold text-amber-700 underline decoration-amber-400 underline-offset-2 hover:text-amber-900 break-all"
+        className={`font-semibold text-amber-700 underline decoration-amber-400 underline-offset-2 hover:text-amber-900 ${
+          isMarkdownLink ? 'whitespace-nowrap' : 'break-all'
+        }`}
       >
         {isMarkdownLink ? match[1] : url}
       </a>,
