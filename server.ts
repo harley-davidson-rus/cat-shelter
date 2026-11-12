@@ -38,7 +38,7 @@ import {
   startAutomaticBackupScheduler,
 } from './server/backupScheduler';
 import { ensureBrowserCompatibleVideo } from './server/videoTranscode';
-import type { Cat, OwnerContent, ShelterArticle, SiteContacts, UserAccount, UserRole } from './src/types';
+import type { AdoptionApplication, Cat, OwnerContent, ShelterArticle, SiteContacts, UserAccount, UserRole } from './src/types';
 import {
   articleSeoPath,
   articleTagPath,
@@ -294,6 +294,55 @@ async function sendTransactionalEmail(to: string, subject: string, text: string)
     auth: { user, pass: password },
   });
   await transport.sendMail({ from, to, subject, text });
+}
+
+const HOUSING_TYPE_LABELS: Record<AdoptionApplication['housingType'], string> = {
+  own_apartment: 'Собственная квартира',
+  rented_apartment: 'Арендованная квартира',
+  private_house: 'Частный дом',
+};
+
+function adoptionApplicationEmail(application: AdoptionApplication): string {
+  const lines = [
+    `На сайте появилась новая заявка на котика ${application.catName}.`,
+    '',
+    `Номер заявки: ${application.id}`,
+    `Заявитель: ${application.applicantName}`,
+    `Телефон: ${application.phone}`,
+    `E-mail: ${application.email}`,
+    `Город: ${application.city || 'не указан'}`,
+    `Жильё: ${HOUSING_TYPE_LABELS[application.housingType] || application.housingType}`,
+    `Сетки на окнах: ${application.hasWindowScreens ? 'да' : 'нет'}`,
+    `Другие животные: ${application.hasOtherPets ? 'да' : 'нет'}`,
+  ];
+
+  if (application.otherPetsDescription?.trim()) lines.push(`О других животных: ${application.otherPetsDescription.trim()}`);
+  lines.push(`Опыт содержания животных: ${application.hasExperience ? 'есть' : 'нет'}`);
+  if (application.experienceDescription?.trim()) lines.push(`Об опыте: ${application.experienceDescription.trim()}`);
+  lines.push(`Согласие семьи: ${application.familyAgreement ? 'да' : 'нет'}`);
+  if (application.comment?.trim()) lines.push(`Комментарий: ${application.comment.trim()}`);
+  lines.push('', `Открыть эту заявку: ${PUBLIC_ORIGIN}/?cabinet=1&application=${encodeURIComponent(application.id)}`);
+  return lines.join('\n');
+}
+
+async function notifyStaffAboutApplication(application: AdoptionApplication): Promise<void> {
+  try {
+    const recipients = (await listUsers('administrator')).filter((user) => user.role === 'administrator' || user.role === 'curator');
+    const results = await Promise.allSettled(recipients.map((user) => sendTransactionalEmail(
+      user.email,
+      `Новая заявка на котика ${application.catName} — ${application.id}`,
+      adoptionApplicationEmail(application),
+    )));
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        console.error(`[Email] Не удалось отправить извещение о заявке ${application.id} на ${recipients[index].email}: ${message}`);
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Email] Не удалось подготовить извещения о заявке ${application.id}: ${message}`);
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -918,7 +967,9 @@ async function startServer() {
             : 'Этот котик уже дома. Приём заявок закрыт.';
         return res.status(409).json({ error: message });
       }
-      res.status(201).json(await createApplication(req.visitorId as string, data as never));
+      const application = await createApplication(req.visitorId as string, data as never);
+      await notifyStaffAboutApplication(application);
+      res.status(201).json(application);
     } catch (error) { next(error); }
   });
   app.get('/api/applications', requireAdmin, async (_req, res, next) => {

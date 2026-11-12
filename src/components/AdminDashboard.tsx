@@ -234,6 +234,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [resetToken, setResetToken] = useState('');
   const [inviteCatId, setInviteCatId] = useState('');
   const [inviteSignature, setInviteSignature] = useState('');
+  const [linkedApplicationId] = useState(() => new URLSearchParams(window.location.search).get('application') || '');
   const [activeTab, setActiveTab] = useState<AdminTabId>(DEFAULT_ADMIN_TAB);
   const [isMobileTabMenuOpen, setIsMobileTabMenuOpen] = useState(false);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
@@ -789,8 +790,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   React.useEffect(() => {
     if (!isAuthenticated || !currentUser || currentUser.role === 'owner') return;
-    setActiveTab(getSavedAdminTab(currentUser));
-  }, [currentUser?.email, currentUser?.role, isAuthenticated]);
+    setActiveTab(linkedApplicationId ? 'applications' : getSavedAdminTab(currentUser));
+  }, [currentUser?.email, currentUser?.role, isAuthenticated, linkedApplicationId]);
+
+  React.useEffect(() => {
+    if (!isOpen || !isAuthenticated || currentUser?.role === 'owner' || !linkedApplicationId) return;
+    if (activeTab !== 'applications') {
+      setActiveTab('applications');
+      return;
+    }
+    if (appSearchTerm || appStatusFilter !== 'all') {
+      setAppSearchTerm('');
+      setAppStatusFilter('all');
+      return;
+    }
+    if (!applications.some((application) => application.id === linkedApplicationId)) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const applicationCard = document.getElementById(`admin-application-${linkedApplicationId}`);
+      if (!applicationCard) return;
+      applicationCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      applicationCard.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeTab, appSearchTerm, appStatusFilter, applications, currentUser?.role, isAuthenticated, isOpen, linkedApplicationId]);
 
   const selectAdminTab = (tabId: AdminTabId) => {
     if (currentUser && currentUser.role !== 'owner') saveAdminTab(currentUser, tabId);
@@ -1389,7 +1412,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       return (
                         <div
                           key={app.id}
-                          className="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 shadow-xs hover:border-amber-300 transition-colors"
+                          id={`admin-application-${app.id}`}
+                          tabIndex={-1}
+                          className={`bg-white rounded-2xl border p-4 sm:p-5 shadow-xs transition-colors focus:outline-none ${
+                            app.id === linkedApplicationId
+                              ? 'border-amber-500 ring-4 ring-amber-200/70'
+                              : 'border-stone-200 hover:border-amber-300'
+                          }`}
                         >
                           {/* Top Row */}
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">

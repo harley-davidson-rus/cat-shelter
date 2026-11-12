@@ -211,6 +211,7 @@ export default function App() {
   const closeAdminDashboard = () => {
     const url = new URL(window.location.href);
     url.searchParams.delete('cabinet');
+    url.searchParams.delete('application');
     url.searchParams.delete('ownerCat');
     url.searchParams.delete('ownerMedia');
     window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
