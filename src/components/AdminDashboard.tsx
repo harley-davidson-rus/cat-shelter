@@ -102,8 +102,6 @@ interface AdminDashboardProps {
   applications: AdoptionApplication[];
   onUpdateApplicationStatus: (id: string, newStatus: ApplicationStatus, notes?: string) => void;
   onDeleteApplication: (id: string) => void;
-  onExportApplications?: () => void;
-  onImportApplications?: (event: React.ChangeEvent<HTMLInputElement>) => void;
   // Database backup & actions
   onExportAllDatabase?: () => Promise<void> | void;
   onImportAllDatabase?: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void> | void;
@@ -213,8 +211,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   applications,
   onUpdateApplicationStatus,
   onDeleteApplication,
-  onExportApplications,
-  onImportApplications,
   onExportAllDatabase,
   onImportAllDatabase,
   onAuthenticated,
@@ -1366,34 +1362,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <option value="rejected">Отклонено</option>
                     </select>
 
-                    {onExportApplications && (
-                      <button
-                        onClick={onExportApplications}
-                        className="py-1.5 px-2.5 rounded-xl border border-stone-200 hover:border-amber-400 hover:bg-amber-50 text-stone-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs whitespace-nowrap"
-                        title="Экспортировать анкеты-заявки в JSON"
-                      >
-                        <Download className="w-3.5 h-3.5 text-amber-600" />
-                        <span className="hidden sm:inline">Экспорт заявок</span>
-                      </button>
-                    )}
-
-                    {onImportApplications && (
-                      <label
-                        htmlFor="admin-import-apps-input"
-                        className="py-1.5 px-2.5 rounded-xl border border-stone-200 hover:border-amber-400 hover:bg-amber-50 text-stone-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs whitespace-nowrap"
-                        title="Импортировать анкеты-заявки из JSON"
-                      >
-                        <Upload className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Импорт анкет</span>
-                        <input
-                          id="admin-import-apps-input"
-                          type="file"
-                          accept=".json,application/json"
-                          onChange={onImportApplications}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
                   </div>
                 </div>
 

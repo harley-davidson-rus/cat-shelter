@@ -604,63 +604,6 @@ export default function App() {
     }
   };
 
-  // Export applications (ankety zayavok) to JSON file
-  const handleExportApplications = () => {
-    try {
-      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(adminApplications, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', `ankety_zayavok_fond_${new Date().toISOString().slice(0, 10)}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-      showToast(`Все анкеты заявок (${adminApplications.length}) успешно сохранены в файл!`);
-    } catch {
-      showToast('Не удалось экспортировать анкеты заявок');
-    }
-  };
-
-  // Import applications from JSON file
-  const handleImportApplications = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const content = e.target?.result as string;
-        const parsed = JSON.parse(content);
-
-        let appsToImport: any[] = [];
-        if (Array.isArray(parsed)) {
-          appsToImport = parsed;
-        } else if (parsed && typeof parsed === 'object') {
-          if (Array.isArray(parsed.applications)) {
-            appsToImport = parsed.applications;
-          } else if (parsed.data && Array.isArray(parsed.data.applications)) {
-            appsToImport = parsed.data.applications;
-          } else if (parsed.applicantName) {
-            appsToImport = [parsed];
-          }
-        }
-
-        if (appsToImport.length > 0) {
-          for (const app of appsToImport) {
-            await apiCreateApplication(app);
-          }
-          const updated = await apiGetAdminApplications();
-          setAdminApplications(updated);
-          showToast(`Успешно загружено и сохранено анкет-заявок: ${appsToImport.length}`);
-        } else {
-          showToast('В файле не обнаружены анкеты заявок на усыновление');
-        }
-      } catch {
-        showToast('Ошибка при чтении файла заявок');
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-  };
-
   // Export full computer database (Cats, Applications, Articles, Settings)
   const handleExportAllDatabase = async () => {
     try {
@@ -1091,8 +1034,6 @@ export default function App() {
         applications={adminApplications}
         onUpdateApplicationStatus={handleUpdateApplicationStatus}
         onDeleteApplication={handleDeleteApplication}
-        onExportApplications={handleExportApplications}
-        onImportApplications={handleImportApplications}
         onAuthenticated={async () => {
           const [loadedApplications, loadedRatings, loadedAnalytics] = await Promise.all([
             apiGetAdminApplications(),
