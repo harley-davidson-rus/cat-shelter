@@ -233,6 +233,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [inviteCatId, setInviteCatId] = useState('');
   const [inviteSignature, setInviteSignature] = useState('');
   const [linkedApplicationId] = useState(() => new URLSearchParams(window.location.search).get('application') || '');
+  const linkedApplicationHandledRef = React.useRef(false);
   const [activeTab, setActiveTab] = useState<AdminTabId>(DEFAULT_ADMIN_TAB);
   const [isMobileTabMenuOpen, setIsMobileTabMenuOpen] = useState(false);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
@@ -794,7 +795,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [currentUser?.email, currentUser?.role, isAuthenticated, linkedApplicationId]);
 
   React.useEffect(() => {
-    if (!isOpen || !isAuthenticated || currentUser?.role === 'owner' || !linkedApplicationId) return;
+    if (!isOpen || !isAuthenticated || currentUser?.role === 'owner' || !linkedApplicationId || linkedApplicationHandledRef.current) return;
     if (activeTab !== 'applications') {
       setActiveTab('applications');
       return;
@@ -805,6 +806,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
     if (!applications.some((application) => application.id === linkedApplicationId)) return;
+
+    linkedApplicationHandledRef.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('application');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
 
     const frameId = window.requestAnimationFrame(() => {
       const applicationCard = document.getElementById(`admin-application-${linkedApplicationId}`);
