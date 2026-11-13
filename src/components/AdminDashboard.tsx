@@ -421,6 +421,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       address: contactForm.address.trim(),
       visitingHours: contactForm.visitingHours.trim(),
       phone: contactForm.phone.trim(),
+      email: contactForm.email.trim(),
       telegram: contactForm.telegram.trim(),
       telegramUrl: contactForm.telegramUrl.trim(),
       maxUrl: contactForm.maxUrl.trim(),
@@ -1896,6 +1897,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         placeholder="+7 900 000-00-00"
                         className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                       />
+                    </label>
+                    <label className="space-y-1.5 sm:col-span-2">
+                      <span className="block text-xs font-bold text-stone-700 uppercase tracking-wider">E-mail организации</span>
+                      <input
+                        type="email"
+                        value={contactForm.email}
+                        onChange={(event) => setContactForm((prev) => ({ ...prev, email: event.target.value }))}
+                        placeholder="info@example.ru"
+                        className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                      <span className="block text-xs text-stone-500">Отображается в разделе «Контакты» на главной странице.</span>
                     </label>
                     <label className="space-y-1.5">
                       <span className="block text-xs font-bold text-stone-700 uppercase tracking-wider">Подпись Telegram</span>

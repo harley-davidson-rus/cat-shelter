@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cat as CatIcon, Heart, MapPin, Clock, Send, Lock, Phone, Youtube } from 'lucide-react';
+import { Cat as CatIcon, Heart, MapPin, Clock, Send, Lock, Phone, Mail, Youtube } from 'lucide-react';
 import { SiteContacts, ShelterStats } from '../types';
 
 export const MaxIcon = ({ className = '' }: { className?: string }) => (
@@ -123,6 +123,18 @@ export const Footer: React.FC<FooterProps> = ({ contacts, shelterStats, onOpenAd
                 <span className="text-stone-400">Номер телефона:</span>
                 <span className="font-medium text-stone-200">{contacts.phone || 'Не указан'}</span>
               </li>
+              {contacts.email && (
+                <li className="flex items-center gap-2.5">
+                  <Mail className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-stone-400">E-mail:</span>
+                  <a
+                    href={`mailto:${contacts.email}`}
+                    className="min-w-0 break-all font-medium text-amber-400 transition-colors hover:text-amber-300 hover:underline"
+                  >
+                    {contacts.email}
+                  </a>
+                </li>
+              )}
               <li className="grid grid-cols-[1rem_7rem_minmax(0,1fr)] items-center gap-x-2.5">
                 <Send className="w-4 h-4 text-amber-400 shrink-0" />
                 <span className="text-stone-400">Telegram-канал:</span>

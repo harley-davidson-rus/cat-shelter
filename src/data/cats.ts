@@ -51,6 +51,7 @@ export const SHELTER_INFO = {
   address: 'Санкт-Петербург, м. Площадь Мужества',
   visitingHours: 'Любой день по предварительной договорённости.',
   phone: '',
+  email: 'kindforcat@gmail.com',
   telegram: 't.me/maythecatbewithyou',
   telegramUrl: 'https://t.me/maythecatbewithyou',
   maxUrl: 'https://max.ru/channel_dobrotadylakota',

@@ -104,6 +104,7 @@ export interface SiteContacts {
   address: string;
   visitingHours: string;
   phone: string;
+  email: string;
   telegram: string;
   telegramUrl: string;
   maxUrl: string;

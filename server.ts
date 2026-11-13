@@ -74,6 +74,7 @@ const siteContactsSchema = z.object({
   address: z.string().trim().min(1).max(300),
   visitingHours: z.string().trim().min(1).max(300),
   phone: z.string().trim().max(100),
+  email: z.union([z.literal(''), z.string().trim().email().max(320)]),
   telegram: z.string().trim().min(1).max(120),
   telegramUrl: z.string().trim().url().max(500),
   maxUrl: optionalUrlSchema.optional().default(''),
@@ -440,6 +441,7 @@ function organizationStructuredData(contacts: SiteContacts): Record<string, unkn
     image: PUBLIC_ORIGIN + '/default_cat.jpg',
     description: 'Фонд помощи животным: лечение, социализация и устройство котиков в ответственные семьи.',
     ...(contacts.phone ? { telephone: contacts.phone } : {}),
+    ...(contacts.email ? { email: contacts.email } : {}),
     address: {
       '@type': 'PostalAddress',
       addressLocality: 'Санкт-Петербург',

@@ -119,6 +119,7 @@ export default function App() {
     address: SHELTER_INFO.address,
     visitingHours: SHELTER_INFO.visitingHours,
     phone: SHELTER_INFO.phone,
+    email: SHELTER_INFO.email,
     telegram: SHELTER_INFO.telegram,
     telegramUrl: SHELTER_INFO.telegramUrl,
     maxUrl: SHELTER_INFO.maxUrl,
