@@ -118,13 +118,13 @@ export const Footer: React.FC<FooterProps> = ({ contacts, shelterStats, onOpenAd
                 <Clock className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>{contacts.visitingHours}</span>
               </li>
-              <li className="flex items-center gap-2.5">
+              <li className="grid grid-cols-[1rem_8rem_minmax(0,1fr)] items-center gap-x-2.5">
                 <Phone className="w-4 h-4 text-amber-400 shrink-0" />
                 <span className="text-stone-400">Номер телефона:</span>
-                <span className="font-medium text-stone-200">{contacts.phone || 'Не указан'}</span>
+                <span className="min-w-0 font-medium text-stone-200">{contacts.phone || 'Не указан'}</span>
               </li>
               {contacts.email && (
-                <li className="flex items-center gap-2.5">
+                <li className="grid grid-cols-[1rem_8rem_minmax(0,1fr)] items-center gap-x-2.5">
                   <Mail className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="text-stone-400">E-mail:</span>
                   <a
@@ -135,7 +135,7 @@ export const Footer: React.FC<FooterProps> = ({ contacts, shelterStats, onOpenAd
                   </a>
                 </li>
               )}
-              <li className="grid grid-cols-[1rem_7rem_minmax(0,1fr)] items-center gap-x-2.5">
+              <li className="grid grid-cols-[1rem_8rem_minmax(0,1fr)] items-center gap-x-2.5">
                 <Send className="w-4 h-4 text-amber-400 shrink-0" />
                 <span className="text-stone-400">Telegram-канал:</span>
                 <a
@@ -148,7 +148,7 @@ export const Footer: React.FC<FooterProps> = ({ contacts, shelterStats, onOpenAd
                 </a>
               </li>
               {contacts.maxUrl && (
-                <li className="grid grid-cols-[1rem_7rem_minmax(0,1fr)] items-center gap-x-2.5">
+                <li className="grid grid-cols-[1rem_8rem_minmax(0,1fr)] items-center gap-x-2.5">
                   <MaxIcon className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="text-stone-400">MAX:</span>
                   <a
@@ -162,7 +162,7 @@ export const Footer: React.FC<FooterProps> = ({ contacts, shelterStats, onOpenAd
                 </li>
               )}
               {contacts.vkUrl && (
-                <li className="grid grid-cols-[1rem_7rem_minmax(0,1fr)] items-center gap-x-2.5">
+                <li className="grid grid-cols-[1rem_8rem_minmax(0,1fr)] items-center gap-x-2.5">
                   <VkIcon className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="text-stone-400">VK:</span>
                   <a
@@ -176,7 +176,7 @@ export const Footer: React.FC<FooterProps> = ({ contacts, shelterStats, onOpenAd
                 </li>
               )}
               {contacts.youtubeUrl && (
-                <li className="grid grid-cols-[1rem_7rem_minmax(0,1fr)] items-center gap-x-2.5">
+                <li className="grid grid-cols-[1rem_8rem_minmax(0,1fr)] items-center gap-x-2.5">
                   <Youtube className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="text-stone-400">YouTube:</span>
                   <a
@@ -190,7 +190,7 @@ export const Footer: React.FC<FooterProps> = ({ contacts, shelterStats, onOpenAd
                 </li>
               )}
               {contacts.rutubeUrl && (
-                <li className="grid grid-cols-[1rem_7rem_minmax(0,1fr)] items-center gap-x-2.5">
+                <li className="grid grid-cols-[1rem_8rem_minmax(0,1fr)] items-center gap-x-2.5">
                   <RutubeIcon className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="text-stone-400">RUTUBE:</span>
                   <a
