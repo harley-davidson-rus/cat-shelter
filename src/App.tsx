@@ -27,6 +27,7 @@ import {
   apiSaveCat,
   apiDeleteCat,
   apiGetAdminApplications,
+  apiMarkApplicationViewed,
   apiCreateApplication,
   apiUpdateApplication,
   apiDeleteApplication,
@@ -506,6 +507,16 @@ export default function App() {
       showToast(`Статус заявки #${appId} обновлён в локальной БД`);
     } catch {
       showToast('Ошибка при обновлении статуса заявки');
+    }
+  };
+
+  const handleApplicationViewed = async (appId: string) => {
+    try {
+      const updated = await apiMarkApplicationViewed(appId);
+      setAdminApplications((prev) => prev.map((app) => (app.id === appId ? updated : app)));
+    } catch {
+      // A temporary network failure must not prevent the curator from working with the application.
+      throw new Error('Application view status update failed');
     }
   };
 
@@ -1032,6 +1043,7 @@ export default function App() {
         }}
         onDeleteArticle={handleDeleteArticle}
         applications={adminApplications}
+        onApplicationViewed={handleApplicationViewed}
         onUpdateApplicationStatus={handleUpdateApplicationStatus}
         onDeleteApplication={handleDeleteApplication}
         onAuthenticated={async () => {

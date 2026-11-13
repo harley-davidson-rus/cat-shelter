@@ -159,6 +159,10 @@ export function apiUpdateApplication(id: string, status: ApplicationStatus, admi
   });
 }
 
+export function apiMarkApplicationViewed(id: string): Promise<AdoptionApplication> {
+  return request('/api/applications/' + id + '/view', { method: 'POST' });
+}
+
 export async function apiDeleteApplication(id: string): Promise<boolean> {
   return (await request<{ success: boolean }>('/api/applications/' + id, { method: 'DELETE' })).success;
 }

@@ -10,7 +10,7 @@ import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
 import {
   initDatabase, getAllCats, getBootstrapData, saveCat, deleteCat,
-  getAllApplications, getApplicationsForOwner, createApplication, updateApplication, deleteApplication,
+  getAllApplications, getApplicationsForOwner, createApplication, updateApplication, markApplicationReviewing, deleteApplication,
   getAllArticles, createArticle, updateArticle, deleteArticle, toggleArticleLike,
   getShelterStats, setShelterStats,
   getSiteContacts, setSiteContacts,
@@ -976,6 +976,13 @@ async function startServer() {
   });
   app.get('/api/applications', requireAdmin, async (_req, res, next) => {
     try { res.json(await getAllApplications()); } catch (error) { next(error); }
+  });
+  app.post('/api/applications/:id/view', requireAdmin, async (req, res, next) => {
+    try {
+      const application = await markApplicationReviewing(req.params.id);
+      if (!application) return res.status(404).json({ error: 'Application not found' });
+      res.json(application);
+    } catch (error) { next(error); }
   });
   app.patch('/api/applications/:id', requireAdmin, async (req, res, next) => {
     try {

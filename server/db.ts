@@ -523,6 +523,14 @@ export async function updateApplication(id: string, updates: Partial<AdoptionApp
   return application;
 }
 
+export async function markApplicationReviewing(id: string): Promise<AdoptionApplication | null> {
+  await pool.query(
+    "UPDATE applications SET status = 'reviewing', updated_at = now() WHERE id = $1 AND status = 'new'",
+    [id],
+  );
+  return (await readApplications(pool)).find((application) => application.id === id) || null;
+}
+
 export async function deleteApplication(id: string): Promise<boolean> {
   return Boolean((await pool.query('DELETE FROM applications WHERE id = $1', [id])).rowCount);
 }

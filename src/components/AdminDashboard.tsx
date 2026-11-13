@@ -100,6 +100,7 @@ interface AdminDashboardProps {
   onDeleteArticle?: (articleId: string) => void;
   // Applications data & actions
   applications: AdoptionApplication[];
+  onApplicationViewed: (id: string) => Promise<void>;
   onUpdateApplicationStatus: (id: string, newStatus: ApplicationStatus, notes?: string) => void;
   onDeleteApplication: (id: string) => void;
   // Database backup & actions
@@ -209,6 +210,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onEditArticle,
   onDeleteArticle,
   applications,
+  onApplicationViewed,
   onUpdateApplicationStatus,
   onDeleteApplication,
   onExportAllDatabase,
@@ -387,6 +389,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [appStatusFilter, setAppStatusFilter] = useState<'all' | ApplicationStatus>('all');
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [curatorNote, setCuratorNote] = useState('');
+  const autoReviewingIdsRef = React.useRef(new Set<string>());
 
   // Cats sub-state in admin
   const [catSearchTerm, setCatSearchTerm] = useState('');
@@ -811,6 +814,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [activeTab, appSearchTerm, appStatusFilter, applications, currentUser?.role, isAuthenticated, isOpen, linkedApplicationId]);
+
+  React.useEffect(() => {
+    if (!isOpen || !isAuthenticated || currentUser?.role === 'owner' || activeTab !== 'applications') return;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.2) return;
+        const applicationId = (entry.target as HTMLElement).dataset.applicationId;
+        if (!applicationId || autoReviewingIdsRef.current.has(applicationId)) return;
+        autoReviewingIdsRef.current.add(applicationId);
+        observer.unobserve(entry.target);
+        void onApplicationViewed(applicationId).catch(() => {
+          autoReviewingIdsRef.current.delete(applicationId);
+        });
+      });
+    }, { threshold: [0.2] });
+
+    const frameId = window.requestAnimationFrame(() => {
+      applications
+        .filter((application) => application.status === 'new')
+        .forEach((application) => {
+          const card = document.getElementById(`admin-application-${application.id}`);
+          if (card) observer.observe(card);
+        });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      observer.disconnect();
+    };
+  }, [activeTab, appSearchTerm, appStatusFilter, applications, currentUser?.role, isAuthenticated, isOpen, onApplicationViewed]);
 
   const selectAdminTab = (tabId: AdminTabId) => {
     if (currentUser && currentUser.role !== 'owner') saveAdminTab(currentUser, tabId);
@@ -1382,6 +1416,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div
                           key={app.id}
                           id={`admin-application-${app.id}`}
+                          data-application-id={app.id}
                           tabIndex={-1}
                           className={`bg-white rounded-2xl border p-4 sm:p-5 shadow-xs transition-colors focus:outline-none ${
                             app.id === linkedApplicationId
