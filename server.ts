@@ -88,12 +88,10 @@ const donationSettingsSchema = z.object({
   image: z.string().min(1).max(14000000),
 });
 const passwordSchema = z.string()
-  .min(8, 'Пароль должен содержать минимум 8 символов')
-  .max(200, 'Пароль не должен быть длиннее 200 символов')
-  .regex(/[a-z]/, 'Пароль должен содержать строчную латинскую букву')
-  .regex(/[A-Z]/, 'Пароль должен содержать заглавную латинскую букву')
-  .regex(/[0-9]/, 'Пароль должен содержать цифру');
+  .min(4, 'Пароль должен содержать минимум 4 символа')
+  .max(200, 'Пароль не должен быть длиннее 200 символов');
 const emailSchema = z.string().trim().email().max(320);
+const verificationCodeSchema = z.string().trim().regex(/^\d{6}$/, 'Введите шестизначный код из письма');
 const databaseBackupSettingsSchema = z.object({
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   retentionCount: z.number().int().min(1).max(90),
@@ -1044,7 +1042,7 @@ async function startServer() {
       const qrCode = await QRCode.toDataURL(registrationUrl, { width: 220, margin: 1, errorCorrectionLevel: 'M' });
       res.type('html').send(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Памятка — ${escapeHtml(cat.name)}</title><style>
         body{font-family:Arial,sans-serif;color:#1c1917;margin:0}.memo{box-sizing:border-box;min-height:100vh;padding:24mm 20mm;display:grid;grid-template-columns:1fr 48mm;gap:12mm;align-items:start}.memo h1{font-size:22pt;margin:0 0 8mm}.memo h2{font-size:15pt;margin:0 0 4mm}.memo p,.memo li{font-size:11pt;line-height:1.45}.qr{text-align:center}.qr img{width:48mm;height:48mm}.actions{position:fixed;right:16px;top:16px;display:flex;align-items:flex-start;gap:8px;z-index:2}.email-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:560px}.email-form input{box-sizing:border-box;width:260px;padding:10px 12px;border:1px solid #d6d3d1;border-radius:10px;font:14px Arial;background:white}.actions button{font:600 14px Arial;padding:10px 14px;border-radius:10px;border:0;background:#f59e0b;color:white;cursor:pointer;white-space:nowrap}.actions button.secondary{background:#1c1917}.actions button:disabled{opacity:.6;cursor:wait}.email-status{flex-basis:100%;text-align:right;font-size:12px;color:#166534;min-height:15px}.email-status.error{color:#be123c}@media(max-width:850px){.actions{position:static;padding:12px;justify-content:flex-end;flex-wrap:wrap}.memo{padding-top:12mm}.email-form input{width:220px}}@media print{.actions{display:none}}
-      </style></head><body><div class="actions"><form id="email-form" class="email-form"><input id="recipient-email" type="email" required autocomplete="email" placeholder="E-mail получателя" aria-label="E-mail получателя"><button id="email-submit" class="secondary" type="submit">Отправить на e-mail</button><span id="email-status" class="email-status" role="status"></span></form><button type="button" onclick="window.print()">Печать памятки</button></div><section class="memo"><div><h1>Памятка нового хозяина</h1><h2>Котик: ${escapeHtml(cat.name)}</h2><p>Отсканируйте QR-код. Ссылка уже содержит защищённую привязку к этому котику.</p><ul><li>Если у вас уже есть аккаунт владельца, войдите в него — котик сразу появится в личном кабинете.</li><li>Если аккаунта ещё нет, зарегистрируйтесь и подтвердите адрес электронной почты. После подтверждения котик будет привязан к аккаунту автоматически.</li><li>${PASSWORD_REQUIREMENTS}</li><li>Если письмо с подтверждением не пришло, проверьте папку «Спам».</li><li>Если вы случайно указали неверный адрес электронной почты, не страшно — обратитесь в наш центр, и мы всё исправим.</li><li>В личном кабинете вы сможете задавать вопросы, а также публиковать заметки, фотографии и короткие видео о котике.</li></ul></div><div class="qr"><img src="${qrCode}" alt="QR-код привязки котика"></div></section><script>
+      </style></head><body><div class="actions"><form id="email-form" class="email-form"><input id="recipient-email" type="email" required autocomplete="email" placeholder="E-mail получателя" aria-label="E-mail получателя"><button id="email-submit" class="secondary" type="submit">Отправить на e-mail</button><span id="email-status" class="email-status" role="status"></span></form><button type="button" onclick="window.print()">Печать памятки</button></div><section class="memo"><div><h1>Памятка нового хозяина</h1><h2>Котик: ${escapeHtml(cat.name)}</h2><p>Отсканируйте QR-код. Ссылка уже содержит защищённую привязку к этому котику.</p><ul><li>Если у вас уже есть аккаунт владельца, войдите в него — котик сразу появится в личном кабинете.</li><li>Если аккаунта ещё нет, зарегистрируйтесь и подтвердите адрес электронной почты шестизначным кодом из письма. После подтверждения котик будет привязан к аккаунту автоматически.</li><li>${PASSWORD_REQUIREMENTS}</li><li>Если письмо с кодом не пришло, проверьте папку «Спам».</li><li>Если вы случайно указали неверный адрес электронной почты, не страшно — обратитесь в наш центр, и мы всё исправим.</li><li>В личном кабинете вы сможете задавать вопросы, а также публиковать заметки, фотографии и короткие видео о котике.</li></ul></div><div class="qr"><img src="${qrCode}" alt="QR-код привязки котика"></div></section><script>
         document.getElementById('email-form').addEventListener('submit',async function(event){event.preventDefault();var input=document.getElementById('recipient-email');var button=document.getElementById('email-submit');var status=document.getElementById('email-status');button.disabled=true;status.className='email-status';status.textContent='Отправляем…';try{var response=await fetch('/api/cats/${encodeURIComponent(cat.id)}/memo-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:input.value})});var result=await response.json();if(!response.ok)throw new Error(result.error||'Не удалось отправить письмо');status.textContent=result.message||'Письмо отправлено.';}catch(error){status.className='email-status error';status.textContent=error instanceof Error?error.message:'Не удалось отправить письмо';}finally{button.disabled=false;}});
       </script></body></html>`);
     } catch (error) { next(error); }
@@ -1059,7 +1057,7 @@ async function startServer() {
       await sendTransactionalEmail(
         email,
         `Памятка нового хозяина — ${cat.name}`,
-        `Памятка нового хозяина\n\nКотик: ${cat.name}\n\nПерейдите по защищённой ссылке, чтобы войти или зарегистрироваться и привязать котика к личному кабинету:\n${registrationUrl}\n\n• Если у вас уже есть аккаунт владельца, войдите в него — котик сразу появится в личном кабинете.\n• Если аккаунта ещё нет, зарегистрируйтесь и подтвердите адрес электронной почты. После подтверждения котик будет привязан к аккаунту автоматически.\n• ${PASSWORD_REQUIREMENTS}\n• Если письмо с подтверждением не пришло, проверьте папку «Спам».\n• Если вы случайно указали неверный адрес электронной почты, не страшно — обратитесь в наш центр, и мы всё исправим.\n• В личном кабинете вы сможете задавать вопросы, а также публиковать заметки, фотографии и короткие видео о котике.`,
+        `Памятка нового хозяина\n\nКотик: ${cat.name}\n\nПерейдите по защищённой ссылке, чтобы войти или зарегистрироваться и привязать котика к личному кабинету:\n${registrationUrl}\n\n• Если у вас уже есть аккаунт владельца, войдите в него — котик сразу появится в личном кабинете.\n• Если аккаунта ещё нет, зарегистрируйтесь и подтвердите адрес электронной почты шестизначным кодом из письма. После подтверждения котик будет привязан к аккаунту автоматически.\n• ${PASSWORD_REQUIREMENTS}\n• Если письмо с кодом не пришло, проверьте папку «Спам».\n• Если вы случайно указали неверный адрес электронной почты, не страшно — обратитесь в наш центр, и мы всё исправим.\n• В личном кабинете вы сможете задавать вопросы, а также публиковать заметки, фотографии и короткие видео о котике.`,
       );
       res.json({ success: true, message: `Памятка отправлена на ${email}` });
     } catch (error) { next(error); }
@@ -1090,31 +1088,33 @@ async function startServer() {
       if (input.password !== input.passwordConfirm) return res.status(400).json({ error: 'Пароли не совпадают' });
       const invitedCat = await resolveInvitedCat(input.catId, input.invite);
       const registration = await registerOwner(input.email, input.password, input.displayName, invitedCat?.id);
-      const verifyUrl = `${PUBLIC_ORIGIN}/?verify=${encodeURIComponent(registration.token)}`;
       await sendTransactionalEmail(
         registration.user.email,
-        'Подтвердите регистрацию в «Доброта для кота»',
-        `Для подтверждения регистрации перейдите по ссылке: ${verifyUrl}\n\nЕсли вы не создавали аккаунт, проигнорируйте письмо.`,
+        'Код подтверждения регистрации в «Доброта для кота»',
+        `Код подтверждения: ${registration.code}\n\nВведите этот код на сайте «Доброта для кота». Код действует 30 минут.\n\nЕсли вы не создавали аккаунт, проигнорируйте письмо.`,
       );
-      res.status(201).json({ message: 'Письмо отправлено. Подтвердите регистрацию по ссылке из письма. Если письма нет, проверьте папку «Спам».' });
+      res.status(201).json({ message: 'Шестизначный код отправлен на e-mail. Введите его для подтверждения регистрации. Если письма нет, проверьте папку «Спам».' });
     } catch (error) { next(error); }
   });
   app.post('/api/auth/resend-verification', async (req, res, next) => {
     try {
       const email = validate(emailSchema, req.body?.email);
-      const token = await resendVerification(email);
-      if (token) {
-        const verifyUrl = `${PUBLIC_ORIGIN}/?verify=${encodeURIComponent(token)}`;
-        await sendTransactionalEmail(email, 'Новая ссылка подтверждения регистрации', `Подтвердите регистрацию: ${verifyUrl}`);
+      const code = await resendVerification(email);
+      if (code) {
+        await sendTransactionalEmail(
+          email,
+          'Новый код подтверждения регистрации',
+          `Новый код подтверждения: ${code}\n\nВведите этот код на сайте «Доброта для кота». Код действует 30 минут.\n\nЕсли вы не запрашивали код, проигнорируйте письмо.`,
+        );
       }
-      res.json({ message: 'Если регистрация ожидает подтверждения, новое письмо отправлено. Проверьте также папку «Спам».' });
+      res.json({ message: 'Если регистрация ожидает подтверждения, новый шестизначный код отправлен. Проверьте также папку «Спам».' });
     } catch (error) { next(error); }
   });
   app.post('/api/auth/verify', async (req, res, next) => {
     try {
-      const token = validate(z.string().min(32).max(200), req.body?.token);
-      const user = await verifyRegistration(token);
-      if (!user) return res.status(400).json({ error: 'Ссылка недействительна или срок её действия истёк' });
+      const input = validate(z.object({ email: emailSchema, code: verificationCodeSchema }), req.body);
+      const user = await verifyRegistration(input.email, input.code);
+      if (!user) return res.status(400).json({ error: 'Код неверен, просрочен или исчерпано число попыток. Запросите новый код.' });
       res.json({ message: 'Регистрация подтверждена. Теперь вы можете войти.', user });
     } catch (error) { next(error); }
   });
@@ -1166,7 +1166,7 @@ async function startServer() {
       const auth = await authenticateUser(email, password);
       if (auth.needsVerification) {
         if (invitedCat) await setPendingUserCat(email, invitedCat.id);
-        return res.status(403).json({ authenticated: false, needsVerification: true, error: 'Подтвердите регистрацию по ссылке из письма.' });
+        return res.status(403).json({ authenticated: false, needsVerification: true, error: 'Подтвердите регистрацию шестизначным кодом из письма.' });
       }
       if (!auth.user) {
         const current = state && state.resetAt > now ? state : { count: 0, resetAt: now + 15 * 60 * 1000 };

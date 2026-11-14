@@ -226,9 +226,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const passwordInputRef = React.useRef<HTMLInputElement>(null);
   const [loginError, setLoginError] = useState('');
   const [authMessage, setAuthMessage] = useState('');
-  const [authMode, setAuthMode] = useState<'choice' | 'login' | 'register' | 'forgot' | 'reset'>('login');
+  const [authMode, setAuthMode] = useState<'choice' | 'login' | 'register' | 'verify' | 'forgot' | 'reset'>('login');
   const [displayNameInput, setDisplayNameInput] = useState('');
   const [passwordConfirmInput, setPasswordConfirmInput] = useState('');
+  const [verificationCodeInput, setVerificationCodeInput] = useState('');
   const [resetToken, setResetToken] = useState('');
   const [inviteCatId, setInviteCatId] = useState('');
   const [inviteSignature, setInviteSignature] = useState('');
@@ -322,7 +323,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   React.useEffect(() => {
     if (!isOpen) return;
     const params = new URLSearchParams(window.location.search);
-    const verifyToken = params.get('verify');
     const passwordResetToken = params.get('reset');
     const catId = params.get('catId') || '';
     const invite = params.get('invite') || '';
@@ -333,16 +333,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setResetToken(passwordResetToken);
       setAuthMode('reset');
     }
-    if (verifyToken) {
-      setIsCheckingSession(true);
-      apiVerifyRegistration(verifyToken)
-        .then((result) => {
-          setAuthMode('login');
-          setAuthMessage(result.message);
-          window.history.replaceState(null, '', window.location.pathname);
-        })
-        .catch((error) => setLoginError(error instanceof Error ? error.message : 'Не удалось подтвердить регистрацию'))
-        .finally(() => setIsCheckingSession(false));
+    if (params.has('verify')) {
+      setAuthMode('verify');
+      setLoginError('Ссылки подтверждения больше не используются. Запросите новый шестизначный код.');
+      window.history.replaceState(null, '', window.location.pathname);
     }
   }, [isOpen]);
 
@@ -651,10 +645,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const result = await apiRegisterOwner(emailInput, passwordInput, passwordConfirmInput, displayNameInput, inviteCatId || undefined, inviteSignature || undefined);
       setAuthMessage(result.message);
-      setAuthMode('login');
+      setAuthMode('verify');
       setPasswordInput('');
       setPasswordConfirmInput('');
     } catch (error) { setLoginError(error instanceof Error ? error.message : 'Не удалось зарегистрироваться'); }
+  };
+
+  const handleVerifyRegistration = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoginError('');
+    try {
+      const result = await apiVerifyRegistration(emailInput, verificationCodeInput);
+      setAuthMessage(result.message);
+      setAuthMode('login');
+      setVerificationCodeInput('');
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Не удалось подтвердить регистрацию');
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setLoginError('');
+    try {
+      const result = await apiResendVerification(emailInput);
+      setAuthMessage(result.message);
+      setVerificationCodeInput('');
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Не удалось отправить новый код');
+    }
   };
 
   const handleForgotPassword = async (event: React.FormEvent) => {
@@ -689,8 +707,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPasswordInput.length < 8) {
-      setPasswordChangeMessage({ type: 'error', text: 'Новый пароль должен содержать минимум 8 символов' });
+    if (newPasswordInput.length < 4) {
+      setPasswordChangeMessage({ type: 'error', text: 'Новый пароль должен содержать минимум 4 символа' });
       return;
     }
     if (newPasswordInput !== newPasswordConfirm) {
@@ -971,11 +989,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <PasswordInput
                     value={newPasswordInput}
                     onChange={(e) => setNewPasswordInput(e.target.value)}
-                    minLength={8}
+                    minLength={4}
                     maxLength={200}
                     pattern={PASSWORD_PATTERN}
                     title={PASSWORD_REQUIREMENTS}
-                    placeholder="Минимум 8 символов"
+                    placeholder="Минимум 4 символа"
                     required
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
@@ -1045,13 +1063,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <h4 className="font-heading font-extrabold text-2xl text-stone-900 mb-2">
-              {authMode === 'choice' ? `Котик ${invitedCatName} едет домой` : authMode === 'register' ? 'Регистрация нового хозяина' : authMode === 'forgot' ? 'Восстановление пароля' : authMode === 'reset' ? 'Новый пароль' : 'Вход в личный кабинет'}
+              {authMode === 'choice' ? `Котик ${invitedCatName} едет домой` : authMode === 'register' ? 'Регистрация нового хозяина' : authMode === 'verify' ? 'Подтверждение e-mail' : authMode === 'forgot' ? 'Восстановление пароля' : authMode === 'reset' ? 'Новый пароль' : 'Вход в личный кабинет'}
             </h4>
             <p className="text-sm text-stone-600 mb-6">
               {authMode === 'choice'
                 ? 'Выберите, как привязать котика к вашему личному кабинету.'
                 : authMode === 'register'
-                ? 'Укажите e-mail, надёжный пароль и имя, которое увидят сотрудники фонда.'
+                ? 'Укажите e-mail, пароль и имя, которое увидят сотрудники фонда.'
+                : authMode === 'verify'
+                  ? 'Введите шестизначный код, который мы отправили на ваш e-mail. Код действует 30 минут.'
                 : authMode === 'forgot'
                   ? 'Мы отправим ссылку для создания нового пароля на указанный e-mail.'
                   : authMode === 'reset'
@@ -1065,7 +1085,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button type="button" onClick={() => { setAuthMode('register'); setLoginError(''); }} className="w-full py-3 px-4 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-sm transition-all">Зарегистрироваться</button>
                 {loginError && <p className="text-xs text-rose-600 font-semibold">{loginError}</p>}
               </div>
-            ) : <form onSubmit={authMode === 'register' ? handleRegister : authMode === 'forgot' ? handleForgotPassword : authMode === 'reset' ? handleResetPassword : handleLogin} className="w-full space-y-4">
+            ) : <form onSubmit={authMode === 'register' ? handleRegister : authMode === 'verify' ? handleVerifyRegistration : authMode === 'forgot' ? handleForgotPassword : authMode === 'reset' ? handleResetPassword : handleLogin} className="w-full space-y-4">
               <div className="text-left">
                 {authMode !== 'reset' && <>
                 <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
@@ -1080,7 +1100,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       if (loginError) setLoginError('');
                     }}
                     placeholder="name@example.com"
-                    autoFocus
+                    autoFocus={authMode !== 'verify'}
+                    required
                     className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all text-stone-900"
                   />
                   <Mail className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
@@ -1090,10 +1111,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Отображаемое имя <span className="normal-case font-normal text-stone-400">необязательно</span></label>
                   <input value={displayNameInput} onChange={(event) => setDisplayNameInput(event.target.value)} maxLength={120} placeholder="Как к вам обращаться" className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
                 </div>}
-                {!['forgot'].includes(authMode) && <div className="mt-3">
+                {authMode === 'verify' && <div className="mt-3">
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Код подтверждения</label>
+                  <input
+                    value={verificationCodeInput}
+                    onChange={(event) => {
+                      setVerificationCodeInput(event.target.value.replace(/\D/g, '').slice(0, 6));
+                      setLoginError('');
+                    }}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    minLength={6}
+                    maxLength={6}
+                    placeholder="000000"
+                    autoFocus
+                    required
+                    className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-center text-2xl font-bold tracking-[0.35em] focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>}
+                {['login', 'register', 'reset'].includes(authMode) && <div className="mt-3">
                   <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">Пароль</label>
                   <div className="relative">
-                    <PasswordInput ref={passwordInputRef} value={passwordInput} onChange={(event) => { setPasswordInput(event.target.value); setLoginError(''); }} minLength={['register', 'reset'].includes(authMode) ? 8 : undefined} maxLength={['register', 'reset'].includes(authMode) ? 200 : undefined} pattern={['register', 'reset'].includes(authMode) ? PASSWORD_PATTERN : undefined} title={['register', 'reset'].includes(authMode) ? PASSWORD_REQUIREMENTS : undefined} required className="w-full pl-10 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                    <PasswordInput ref={passwordInputRef} value={passwordInput} onChange={(event) => { setPasswordInput(event.target.value); setLoginError(''); }} minLength={['register', 'reset'].includes(authMode) ? 4 : undefined} maxLength={['register', 'reset'].includes(authMode) ? 200 : undefined} pattern={['register', 'reset'].includes(authMode) ? PASSWORD_PATTERN : undefined} title={['register', 'reset'].includes(authMode) ? PASSWORD_REQUIREMENTS : undefined} required className="w-full pl-10 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
                     <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
                   </div>
                 </div>}
@@ -1115,7 +1155,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="submit"
                 className="w-full py-3 px-4 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-sm shadow-md shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
               >
-                <span>{authMode === 'register' ? 'Зарегистрироваться' : authMode === 'forgot' ? 'Отправить письмо' : authMode === 'reset' ? 'Сохранить новый пароль' : 'Войти'}</span>
+                <span>{authMode === 'register' ? 'Зарегистрироваться' : authMode === 'verify' ? 'Подтвердить e-mail' : authMode === 'forgot' ? 'Отправить письмо' : authMode === 'reset' ? 'Сохранить новый пароль' : 'Войти'}</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
               {authMode === 'login' ? (
@@ -1126,8 +1166,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ) : (
                 <button type="button" onClick={() => { setAuthMode('login'); setLoginError(''); }} className="text-xs font-semibold text-stone-600 hover:text-stone-900">Вернуться ко входу</button>
               )}
-              {authMode === 'login' && loginError.includes('Подтвердите') && (
-                <button type="button" onClick={async () => { const result = await apiResendVerification(emailInput); setAuthMessage(result.message); }} className="text-xs font-semibold text-amber-700">Отправить письмо повторно</button>
+              {authMode === 'verify' && (
+                <button type="button" onClick={handleResendVerification} className="text-xs font-semibold text-amber-700">Отправить новый код</button>
+              )}
+              {authMode === 'login' && loginError.includes('шестизначным кодом') && (
+                <button type="button" onClick={() => { setAuthMode('verify'); setLoginError(''); setAuthMessage(''); }} className="text-xs font-semibold text-amber-700">Ввести код подтверждения</button>
               )}
             </form>}
           </div>

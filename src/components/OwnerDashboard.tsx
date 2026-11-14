@@ -415,7 +415,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onUserChan
             <form onSubmit={savePassword} className="bg-white border border-stone-200 rounded-2xl p-5 space-y-3">
               <h3 className="font-heading text-lg font-black text-stone-900 flex items-center gap-2"><KeyRound className="w-5 h-5 text-amber-600" /> Изменить пароль</h3>
               <PasswordInput required value={oldPassword} onChange={(event) => setOldPassword(event.target.value)} placeholder="Текущий пароль" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
-              <PasswordInput required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} maxLength={200} pattern={PASSWORD_PATTERN} title={PASSWORD_REQUIREMENTS} placeholder="Новый пароль" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
+              <PasswordInput required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={4} maxLength={200} pattern={PASSWORD_PATTERN} title={PASSWORD_REQUIREMENTS} placeholder="Новый пароль" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
               <PasswordInput required value={newPasswordConfirm} onChange={(event) => setNewPasswordConfirm(event.target.value)} placeholder="Повторите новый пароль" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
               <p className="text-xs text-stone-500">{PASSWORD_REQUIREMENTS}</p>
               <button className="px-4 py-2 rounded-xl bg-stone-900 text-white text-sm font-bold">Изменить пароль</button>

@@ -290,24 +290,10 @@ export function apiResendVerification(email: string): Promise<{ message: string 
   });
 }
 
-const registrationVerificationRequests = new Map<string, Promise<{ message: string; user: UserAccount }>>();
-
-export function apiVerifyRegistration(token: string): Promise<{ message: string; user: UserAccount }> {
-  const pendingRequest = registrationVerificationRequests.get(token);
-  if (pendingRequest) return pendingRequest;
-
-  // Verification consumes a one-time token. Reuse the same request when React
-  // StrictMode runs the link-processing effect twice during development.
-  const verificationRequest = request<{ message: string; user: UserAccount }>('/api/auth/verify', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+export function apiVerifyRegistration(email: string, code: string): Promise<{ message: string; user: UserAccount }> {
+  return request<{ message: string; user: UserAccount }>('/api/auth/verify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, code }),
   });
-  registrationVerificationRequests.set(token, verificationRequest);
-  void verificationRequest.catch(() => {
-    if (registrationVerificationRequests.get(token) === verificationRequest) {
-      registrationVerificationRequests.delete(token);
-    }
-  });
-  return verificationRequest;
 }
 
 export function apiRequestPasswordReset(email: string): Promise<{ message: string }> {

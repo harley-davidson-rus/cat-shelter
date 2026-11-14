@@ -274,7 +274,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ cats, currentU
             <input required value={staffForm.displayName} onChange={(event) => setStaffForm({ ...staffForm, displayName: event.target.value })} placeholder="Отображаемое имя" className="p-3 border border-stone-300 rounded-xl text-sm" />
             <div>
               <label htmlFor="staff-password" className="block text-xs font-bold text-stone-700 mb-1">Пароль</label>
-              <PasswordInput id="staff-password" required minLength={8} maxLength={200} pattern={PASSWORD_PATTERN} title={PASSWORD_REQUIREMENTS} value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} placeholder="Минимум 8 символов" autoComplete="new-password" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
+              <PasswordInput id="staff-password" required minLength={4} maxLength={200} pattern={PASSWORD_PATTERN} title={PASSWORD_REQUIREMENTS} value={staffForm.password} onChange={(event) => setStaffForm({ ...staffForm, password: event.target.value })} placeholder="Минимум 4 символа" autoComplete="new-password" className="w-full p-3 border border-stone-300 rounded-xl text-sm" />
               <p className="mt-1 text-[11px] leading-relaxed text-stone-500">{PASSWORD_REQUIREMENTS}</p>
             </div>
             <div>

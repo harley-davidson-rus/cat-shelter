@@ -316,6 +316,7 @@ export async function initDatabase(): Promise<ServerDbStats> {
     'CREATE TABLE IF NOT EXISTS media_assets (file_name text PRIMARY KEY, mime_type text NOT NULL, content bytea NOT NULL, size_bytes integer NOT NULL, created_at timestamptz NOT NULL DEFAULT now())',
     "CREATE TABLE IF NOT EXISTS shelter_users (email text PRIMARY KEY, display_name text NOT NULL, password_hash text NOT NULL, role text NOT NULL CHECK (role IN ('administrator','curator','owner')), verified_at timestamptz, verification_token_hash text, verification_expires_at timestamptz, reset_token_hash text, reset_expires_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())",
     "DO $migration$ BEGIN ALTER TABLE shelter_users ADD COLUMN pending_cat_id text REFERENCES cats(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_column THEN NULL; END $migration$",
+    "DO $migration$ BEGIN ALTER TABLE shelter_users ADD COLUMN verification_attempts integer NOT NULL DEFAULT 0; EXCEPTION WHEN duplicate_column THEN NULL; END $migration$",
     'CREATE TABLE IF NOT EXISTS shelter_sessions (token_hash text PRIMARY KEY, email text NOT NULL REFERENCES shelter_users(email) ON DELETE CASCADE, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now())',
     'CREATE INDEX IF NOT EXISTS shelter_sessions_email_idx ON shelter_sessions(email)',
     'CREATE TABLE IF NOT EXISTS cat_owners (cat_id text NOT NULL REFERENCES cats(id) ON DELETE CASCADE, owner_email text NOT NULL REFERENCES shelter_users(email) ON DELETE CASCADE, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (cat_id, owner_email))',
@@ -330,7 +331,7 @@ export async function initDatabase(): Promise<ServerDbStats> {
   if (Number(adminCount.rows[0].count) === 0) {
     const legacyPassword = typeof legacy.settings?.adminPassword === 'string' ? legacy.settings.adminPassword : undefined;
     const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || legacyPassword;
-    if (!initialPassword || initialPassword.length < 8) throw new Error('ADMIN_INITIAL_PASSWORD must contain at least 8 characters');
+    if (!initialPassword || initialPassword.length < 4) throw new Error('ADMIN_INITIAL_PASSWORD must contain at least 4 characters');
     await pool.query('INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)', ['admin', await bcrypt.hash(initialPassword, 12)]);
   }
   await pool.query(`
@@ -900,9 +901,13 @@ export async function deleteUserSession(hash: string): Promise<void> {
   await pool.query('DELETE FROM shelter_sessions WHERE token_hash = $1', [hash]);
 }
 
-export async function registerOwner(email: string, password: string, displayName?: string, pendingCatId?: string): Promise<{ user: UserAccount; token: string }> {
+function createVerificationCode(): string {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
+export async function registerOwner(email: string, password: string, displayName?: string, pendingCatId?: string): Promise<{ user: UserAccount; code: string }> {
   const normalized = normalizeEmail(email);
-  const token = crypto.randomBytes(32).toString('hex');
+  const code = createVerificationCode();
   const existing = await pool.query<{ verified_at: Date | null }>('SELECT verified_at FROM shelter_users WHERE email = $1', [normalized]);
   if (existing.rowCount) {
     if (existing.rows[0].verified_at) throw Object.assign(new Error('Пользователь с таким e-mail уже зарегистрирован'), { status: 409 });
@@ -911,40 +916,63 @@ export async function registerOwner(email: string, password: string, displayName
   const result = await pool.query<UserRow>(`
     INSERT INTO shelter_users (
       email, display_name, password_hash, role, verification_token_hash, verification_expires_at, pending_cat_id
-    ) VALUES ($1, $2, $3, 'owner', $4, now() + interval '24 hours', $5)
+    ) VALUES ($1, $2, $3, 'owner', $4, now() + interval '30 minutes', $5)
     RETURNING email, display_name, password_hash, role, verified_at, created_at, pending_cat_id
-  `, [normalized, displayName?.trim() || normalized, await bcrypt.hash(password, 12), secureTokenHash(token), pendingCatId || null]);
-  return { user: await accountFromRow(result.rows[0]), token };
+  `, [normalized, displayName?.trim() || normalized, await bcrypt.hash(password, 12), secureTokenHash(code), pendingCatId || null]);
+  return { user: await accountFromRow(result.rows[0]), code };
 }
 
 export async function resendVerification(email: string): Promise<string | null> {
   const normalized = normalizeEmail(email);
-  const token = crypto.randomBytes(32).toString('hex');
+  const code = createVerificationCode();
   const result = await pool.query(`
     UPDATE shelter_users
-    SET verification_token_hash = $2, verification_expires_at = now() + interval '24 hours', updated_at = now()
+    SET verification_token_hash = $2, verification_expires_at = now() + interval '30 minutes',
+        verification_attempts = 0, updated_at = now()
     WHERE email = $1 AND role = 'owner' AND verified_at IS NULL
-  `, [normalized, secureTokenHash(token)]);
-  return result.rowCount ? token : null;
+  `, [normalized, secureTokenHash(code)]);
+  return result.rowCount ? code : null;
 }
 
-export async function verifyRegistration(token: string): Promise<UserAccount | null> {
-  const result = await pool.query<UserRow>(`
-    UPDATE shelter_users
-    SET verified_at = now(), verification_token_hash = NULL, verification_expires_at = NULL, updated_at = now()
-    WHERE verification_token_hash = $1 AND verification_expires_at > now()
-    RETURNING email, display_name, password_hash, role, verified_at, created_at, pending_cat_id
-  `, [secureTokenHash(token)]);
-  if (!result.rowCount) return null;
-  const user = result.rows[0];
-  if (user.pending_cat_id) {
-    await pool.query(
-      'INSERT INTO cat_owners (cat_id, owner_email) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [user.pending_cat_id, user.email],
-    );
-    await pool.query('UPDATE shelter_users SET pending_cat_id = NULL WHERE email = $1', [user.email]);
+export async function verifyRegistration(email: string, code: string): Promise<UserAccount | null> {
+  const normalized = normalizeEmail(email);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query<UserRow>(`
+      UPDATE shelter_users
+      SET verified_at = now(), verification_token_hash = NULL, verification_expires_at = NULL,
+          verification_attempts = 0, updated_at = now()
+      WHERE email = $1 AND verification_token_hash = $2 AND verification_expires_at > now()
+        AND verification_attempts < 5
+      RETURNING email, display_name, password_hash, role, verified_at, created_at, pending_cat_id
+    `, [normalized, secureTokenHash(code)]);
+    if (!result.rowCount) {
+      await client.query(`
+        UPDATE shelter_users
+        SET verification_attempts = LEAST(verification_attempts + 1, 5), updated_at = now()
+        WHERE email = $1 AND role = 'owner' AND verified_at IS NULL
+          AND verification_expires_at > now() AND verification_attempts < 5
+      `, [normalized]);
+      await client.query('COMMIT');
+      return null;
+    }
+    const user = result.rows[0];
+    if (user.pending_cat_id) {
+      await client.query(
+        'INSERT INTO cat_owners (cat_id, owner_email) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [user.pending_cat_id, user.email],
+      );
+      await client.query('UPDATE shelter_users SET pending_cat_id = NULL WHERE email = $1', [user.email]);
+    }
+    await client.query('COMMIT');
+    return accountFromRow(user);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-  return accountFromRow(user);
 }
 
 export async function setPendingUserCat(email: string, catId: string): Promise<void> {
