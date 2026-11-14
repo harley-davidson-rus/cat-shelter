@@ -1283,7 +1283,7 @@ async function startServer() {
       const kind = validate(z.enum(['photo', 'video']), req.query.kind);
       const cat = (await getCatsForOwner(req.user!.email)).find((candidate) => candidate.id === catId);
       if (!cat) return res.status(404).type('text/plain').send('Котик не найден или не привязан к вашему аккаунту');
-      if (cat.status !== 'adopted') return res.status(400).type('text/plain').send('Фото и видео можно добавлять после завершения испытательного срока');
+      if (cat.status !== 'trial' && cat.status !== 'adopted') return res.status(400).type('text/plain').send('Фото и видео можно добавлять на испытательном сроке или после того, как котик нашёл дом');
       const isPhoto = kind === 'photo';
       const mediaLabel = isPhoto ? 'Фото' : 'Видео';
       const actionLabel = isPhoto ? 'Сделать фото' : 'Записать видео';

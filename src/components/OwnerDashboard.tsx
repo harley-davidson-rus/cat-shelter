@@ -83,7 +83,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onUserChan
 
   useEffect(() => {
     if (!selectedCat) return;
-    setDraftKind(selectedCat.status === 'adopted' && initialContentKind ? initialContentKind : selectedCat.status === 'adopted' ? 'comment' : 'question');
+    const canShareHomeContent = selectedCat.status === 'trial' || selectedCat.status === 'adopted';
+    setDraftKind(canShareHomeContent && initialContentKind ? initialContentKind : canShareHomeContent ? 'comment' : 'question');
     setDraftText('');
     setDraftMedia([]);
     setIsConfidential(false);
@@ -295,17 +296,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ user, onUserChan
                   <div className="bg-white border border-stone-200 rounded-2xl p-5">
                     <h3 className="font-heading text-xl font-black text-stone-900">{selectedCat.name}</h3>
                     <p className="text-sm text-stone-600 mt-1">
-                      {selectedCat.status === 'trial'
-                        ? 'На испытательном сроке можно только задавать вопросы куратору или ветеринару.'
-                        : selectedCat.status === 'adopted'
-                          ? 'Задавайте вопросы, добавляйте фото, короткие видео и комментарии о жизни дома.'
-                          : 'Вы можете задавать вопросы куратору или ветеринару. Фото, видео и комментарии станут доступны после завершения испытательного срока.'}
+                      {selectedCat.status === 'trial' || selectedCat.status === 'adopted'
+                        ? 'Задавайте вопросы, добавляйте фото, короткие видео и комментарии о жизни дома.'
+                        : 'Вы можете задавать вопросы куратору или ветеринару. Фото, видео и комментарии станут доступны на испытательном сроке.'}
                     </p>
                   </div>
 
                   <form onSubmit={submitContent} className="bg-white border border-stone-200 rounded-2xl p-5 space-y-4">
                       <div className="flex flex-wrap gap-2">
-                        {((selectedCat.status === 'adopted' ? ['question', 'comment', 'photo', 'video'] : ['question']) as OwnerContentKind[]).map((kind) => (
+                        {(((selectedCat.status === 'trial' || selectedCat.status === 'adopted') ? ['question', 'comment', 'photo', 'video'] : ['question']) as OwnerContentKind[]).map((kind) => (
                           <button key={kind} type="button" onClick={() => { setDraftKind(kind); setDraftMedia([]); }} className={'px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ' + (draftKind === kind ? 'bg-amber-500 text-white' : 'bg-stone-100 text-stone-700')}>
                             {kind === 'photo' ? <Image className="w-4 h-4" /> : kind === 'video' ? <Video className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
                             {kindLabel[kind]}

@@ -1239,11 +1239,8 @@ export async function createOwnerContent(email: string, data: { catId: string; k
   if (!ownership.rowCount) throw Object.assign(new Error('Котик не привязан к вашему аккаунту'), { status: 403 });
   const cat = (await getAllCats()).find((candidate) => candidate.id === data.catId);
   if (!cat) throw Object.assign(new Error('Котик не найден'), { status: 404 });
-  if (data.kind !== 'question' && cat.status !== 'adopted') {
-    const message = cat.status === 'trial'
-      ? 'Во время испытательного срока можно только задавать вопросы'
-      : 'Фото, видео и комментарии доступны после завершения испытательного срока';
-    throw Object.assign(new Error(message), { status: 400 });
+  if (data.kind !== 'question' && cat.status !== 'trial' && cat.status !== 'adopted') {
+    throw Object.assign(new Error('Фото, видео и комментарии доступны на испытательном сроке или после того, как котик нашёл дом'), { status: 400 });
   }
   let mediaUrl = data.mediaUrl?.trim() || null;
   if (mediaUrl?.startsWith('data:')) {
