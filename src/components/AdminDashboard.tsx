@@ -39,6 +39,7 @@ import {
   Folder,
   FolderOpen,
   ArrowLeft,
+  CirclePlay,
   Menu,
   ChevronDown,
 } from 'lucide-react';
@@ -1078,6 +1079,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ? PASSWORD_REQUIREMENTS
                     : 'Войдите как администратор, куратор или новый хозяин котика.'}
             </p>
+
+            {authMode === 'register' && (
+              <a
+                href="/videos/registration-guide.mp4"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full mb-5 px-4 py-3 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                <CirclePlay className="w-5 h-5 shrink-0" />
+                <span>Посмотреть видеоинструкцию по регистрации</span>
+              </a>
+            )}
 
             {authMode === 'choice' ? (
               <div className="w-full space-y-3">
