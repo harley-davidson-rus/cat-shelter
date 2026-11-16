@@ -97,12 +97,13 @@ export default function App() {
   }, []);
 
   const dailyHeroCat = useMemo(() => {
-    const catsWithPhotos = cats
+    const eligibleCats = cats.filter((cat) => cat.status !== 'adopted');
+    const catsWithPhotos = eligibleCats
       .filter((cat) => cat.photos?.some((photo) => typeof photo === 'string' && photo.trim() && !photo.includes('/src/assets/')))
       .sort((left, right) => left.id.localeCompare(right.id));
     const candidates = catsWithPhotos.length > 0
       ? catsWithPhotos
-      : [...cats].sort((left, right) => left.id.localeCompare(right.id));
+      : [...eligibleCats].sort((left, right) => left.id.localeCompare(right.id));
     if (candidates.length === 0) return undefined;
 
     const [year, month, day] = heroDateKey.split('-').map(Number);
