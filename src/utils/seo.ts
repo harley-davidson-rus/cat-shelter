@@ -7,12 +7,12 @@ const transliteration: Record<string, string> = {
   ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
 };
 
-export function seoSlug(value: string, fallback = 'material'): string {
+function slugWithTransliteration(value: string, fallback: string, alphabet: Record<string, string>): string {
   const normalized = value
     .trim()
     .toLocaleLowerCase('ru-RU')
     .split('')
-    .map((character) => transliteration[character] ?? character)
+    .map((character) => alphabet[character] ?? character)
     .join('')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
@@ -20,6 +20,14 @@ export function seoSlug(value: string, fallback = 'material'): string {
     .replace(/-+$/g, '');
 
   return normalized || fallback;
+}
+
+export function seoSlug(value: string, fallback = 'material'): string {
+  return slugWithTransliteration(value, fallback, transliteration);
+}
+
+function legacySeoSlug(value: string, fallback = 'material'): string {
+  return slugWithTransliteration(value, fallback, { ...transliteration, щ: 'shch' });
 }
 
 function stableSuffix(id: string): string {
@@ -98,5 +106,6 @@ export function findArticleTagBySlug<T extends { tags: string[] }>(slug: string,
     .filter(Boolean)
     .sort((left, right) => left.localeCompare(right, 'ru'));
 
-  return tags.find((tag) => articleTagSlug(tag) === decoded);
+  return tags.find((tag) => articleTagSlug(tag) === decoded)
+    || tags.find((tag) => legacySeoSlug(normalizeArticleTag(tag), 'tema') === decoded);
 }

@@ -1509,6 +1509,18 @@ send.addEventListener('click',async()=>{if(!selectedFile)return;send.disabled=tr
           res.status(404).type('text/plain').send('Тема не найдена');
           return;
         }
+        const matchingArticles = articles.filter((article) =>
+          (article.tags || []).some((candidate) => articleTagSlug(candidate) === articleTagSlug(tag)),
+        );
+        if (matchingArticles.length === 1) {
+          res.redirect(301, articleSeoPath(matchingArticles[0], articles));
+          return;
+        }
+        const canonicalPath = articleTagPath(tag);
+        if (req.path !== canonicalPath) {
+          res.redirect(301, canonicalPath);
+          return;
+        }
         res
           .set('Cache-Control', 'public, max-age=300')
           .type('text/html')
