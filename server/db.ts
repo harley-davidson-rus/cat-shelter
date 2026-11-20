@@ -123,6 +123,27 @@ function normalizeSiteContacts(data?: Partial<SiteContacts> | null): SiteContact
   };
 }
 
+const DEFAULT_DONATION_SUPPLIES = [
+  'Качественные корма и паштеты',
+  'Наполнитель и пелёнки 60×90',
+  'Когтеточки и прочные переноски',
+  'Средства от блох и гельминтов',
+];
+
+function normalizeDonationSettings(data?: Partial<DonationSettings> | null): DonationSettings {
+  const supplies = Array.isArray(data?.supplies)
+    ? [...new Set(data.supplies.map((item) => typeof item === 'string' ? item.trim() : '').filter(Boolean))]
+    : [];
+  return {
+    title: typeof data?.title === 'string' && data.title.trim() ? data.title : 'Помочь переводом',
+    description: typeof data?.description === 'string' && data.description.trim()
+      ? data.description
+      : 'Отсканируйте QR-код в мобильном приложении банка.',
+    image: typeof data?.image === 'string' && data.image ? data.image : '/images/donation-qr.jpg',
+    supplies: supplies.length ? supplies : DEFAULT_DONATION_SUPPLIES,
+  };
+}
+
 function collectMediaFileNames(value: unknown, result = new Set<string>()): Set<string> {
   if (typeof value === 'string') {
     const fileName = getStoredMediaFileName(value);
@@ -367,6 +388,7 @@ export async function initDatabase(): Promise<ServerDbStats> {
       title: 'Помочь переводом',
       description: 'Отсканируйте QR-код в мобильном приложении банка.',
       image: '/images/donation-qr.jpg',
+      supplies: DEFAULT_DONATION_SUPPLIES,
     }]
   );
   await pool.query(
@@ -441,6 +463,7 @@ export async function getBootstrapData(ownerId: string): Promise<BootstrapData> 
     applications,
     articles,
     siteContacts: normalizeSiteContacts(result.rows[0].siteContacts),
+    donationSettings: normalizeDonationSettings(result.rows[0].donationSettings),
   };
 }
 
@@ -648,14 +671,7 @@ export async function getDonationSettings(): Promise<DonationSettings> {
     'SELECT data FROM site_settings WHERE key = $1',
     ['donation_settings']
   );
-  const data = result.rows[0]?.data;
-  return {
-    title: typeof data?.title === 'string' ? data.title : 'Помочь переводом',
-    description: typeof data?.description === 'string'
-      ? data.description
-      : 'Отсканируйте QR-код в мобильном приложении банка.',
-    image: typeof data?.image === 'string' && data.image ? data.image : '/images/donation-qr.jpg',
-  };
+  return normalizeDonationSettings(result.rows[0]?.data);
 }
 
 export async function setDonationSettings(settings: DonationSettings): Promise<DonationSettings> {

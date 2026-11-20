@@ -86,6 +86,7 @@ const donationSettingsSchema = z.object({
   title: z.string().trim().min(1).max(150),
   description: z.string().trim().min(1).max(1000),
   image: z.string().min(1).max(14000000),
+  supplies: z.array(z.string().trim().min(1).max(200)).min(1).max(30),
 });
 const passwordSchema = z.string()
   .min(4, 'Пароль должен содержать минимум 4 символа')

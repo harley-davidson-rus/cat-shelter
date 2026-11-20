@@ -33,6 +33,7 @@ import {
   HardDrive,
   RefreshCw,
   Heart,
+  Package,
   BarChart3,
   Users,
   Eye,
@@ -43,7 +44,7 @@ import {
   Menu,
   ChevronDown,
 } from 'lucide-react';
-import { Cat, AdoptionApplication, ApplicationStatus, ShelterArticle, ShelterStats, SiteContacts, UserAccount, OwnerContentKind } from '../types';
+import { Cat, AdoptionApplication, ApplicationStatus, ShelterArticle, ShelterStats, SiteContacts, DonationSettings, UserAccount, OwnerContentKind } from '../types';
 import realCatPhoto from '../assets/defaultCat';
 import {
   apiLogin,
@@ -89,6 +90,8 @@ interface AdminDashboardProps {
   onSaveShelterStats: (stats: ShelterStats) => Promise<void>;
   siteContacts: SiteContacts;
   onSaveSiteContacts: (contacts: SiteContacts) => Promise<void>;
+  donationSettings: DonationSettings;
+  onSaveDonationSettings: (settings: DonationSettings) => Promise<void>;
   onAddNewCat: () => void;
   onEditCat: (cat: Cat) => void;
   onDeleteCat: (catId: string) => void;
@@ -110,7 +113,7 @@ interface AdminDashboardProps {
   onAuthenticated: () => Promise<void> | void;
 }
 
-type AdminTabId = 'applications' | 'cats' | 'articles' | 'users' | 'stats' | 'contacts' | 'analytics' | 'database';
+type AdminTabId = 'applications' | 'cats' | 'articles' | 'users' | 'stats' | 'contacts' | 'donations' | 'analytics' | 'database';
 
 const DEFAULT_ADMIN_TAB: AdminTabId = 'applications';
 const ADMIN_TAB_STORAGE_PREFIX = 'shelter:admin-dashboard-tab:';
@@ -121,6 +124,7 @@ const ADMIN_TAB_IDS: ReadonlySet<AdminTabId> = new Set([
   'users',
   'stats',
   'contacts',
+  'donations',
   'analytics',
   'database',
 ]);
@@ -131,7 +135,7 @@ const getSavedAdminTab = (user: UserAccount): AdminTabId => {
   try {
     const savedTab = window.localStorage.getItem(getAdminTabStorageKey(user.email));
     if (!savedTab || !ADMIN_TAB_IDS.has(savedTab as AdminTabId)) return DEFAULT_ADMIN_TAB;
-    if (savedTab === 'database' && user.role !== 'administrator') return DEFAULT_ADMIN_TAB;
+    if ((savedTab === 'database' || savedTab === 'donations') && user.role !== 'administrator') return DEFAULT_ADMIN_TAB;
     return savedTab as AdminTabId;
   } catch {
     return DEFAULT_ADMIN_TAB;
@@ -201,6 +205,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSaveShelterStats,
   siteContacts,
   onSaveSiteContacts,
+  donationSettings,
+  onSaveDonationSettings,
   onAddNewCat,
   onEditCat,
   onDeleteCat,
@@ -409,6 +415,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setContactForm(siteContacts);
   }, [siteContacts]);
 
+  const [donationForm, setDonationForm] = useState<DonationSettings>(donationSettings);
+  const [donationSaveMessage, setDonationSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSavingDonationSettings, setIsSavingDonationSettings] = useState(false);
+
+  React.useEffect(() => {
+    setDonationForm(donationSettings);
+  }, [donationSettings]);
+
+  const updateDonationSupply = (index: number, value: string) => {
+    setDonationForm((current) => ({
+      ...current,
+      supplies: current.supplies.map((item, itemIndex) => itemIndex === index ? value : item),
+    }));
+  };
+
+  const addDonationSupply = () => {
+    setDonationForm((current) => ({ ...current, supplies: [...current.supplies, ''] }));
+  };
+
+  const removeDonationSupply = (index: number) => {
+    setDonationForm((current) => ({
+      ...current,
+      supplies: current.supplies.filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+
 
   const handleContactsSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -438,6 +470,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setContactsSaveMessage({ type: 'error', text: 'Не удалось сохранить контакты. Проверьте ссылки на группы.' });
     } finally {
       setIsSavingContacts(false);
+    }
+  };
+
+  const handleDonationSettingsSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const supplies = [...new Set(donationForm.supplies.map((item) => item.trim()).filter(Boolean))];
+    const settings = {
+      ...donationForm,
+      title: donationForm.title.trim(),
+      description: donationForm.description.trim(),
+      supplies,
+    };
+    if (!settings.title || !settings.description || settings.supplies.length === 0) {
+      setDonationSaveMessage({ type: 'error', text: 'Заполните заголовок, пояснение и добавьте хотя бы одну полезную вещь.' });
+      return;
+    }
+
+    setIsSavingDonationSettings(true);
+    setDonationSaveMessage(null);
+    try {
+      await onSaveDonationSettings(settings);
+      setDonationSaveMessage({ type: 'success', text: 'Раздел «Помочь котикам» сохранён и обновлён на сайте.' });
+    } catch {
+      setDonationSaveMessage({ type: 'error', text: 'Не удалось сохранить настройки помощи.' });
+    } finally {
+      setIsSavingDonationSettings(false);
     }
   };
 
@@ -800,11 +858,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'articles', label: 'Новости', icon: PenTool, count: articles.length },
     { id: 'users', label: 'Пользователи', icon: Users },
     { id: 'contacts', label: 'Параметры организации', icon: MapPin },
+    { id: 'donations', label: 'Помочь котикам', icon: Package },
     { id: 'stats', label: 'Счётчики', icon: Sparkles },
     { id: 'analytics', label: 'Посещения', icon: BarChart3 },
     { id: 'database', label: 'База данных', icon: Database },
   ];
-  const adminTabs = allAdminTabs.filter((tab) => currentUser?.role === 'administrator' || tab.id !== 'database');
+  const adminTabs = allAdminTabs.filter((tab) => currentUser?.role === 'administrator' || !['database', 'donations'].includes(tab.id));
   const activeAdminTab = adminTabs.find((tab) => tab.id === activeTab) || adminTabs[0];
   const ActiveAdminTabIcon = activeAdminTab.icon;
 
@@ -1255,7 +1314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </>
                 )}
               </div>
-              <div className="hidden lg:grid grid-cols-8 gap-2 w-full">
+              <div className="hidden lg:grid grid-cols-9 gap-2 w-full">
                 <button
                   onClick={() => selectAdminTab('applications')}
                   title="Заявки на усыновление"
@@ -1343,6 +1402,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <MapPin className="w-4 h-4" />
                   <span>Параметры</span>
                 </button>
+
+                {currentUser?.role === 'administrator' && <button
+                  onClick={() => selectAdminTab('donations')}
+                  className={'min-w-0 px-2.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ' + (
+                    activeTab === 'donations'
+                      ? 'bg-amber-500 text-white shadow-sm'
+                      : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-100'
+                  )}
+                >
+                  <Package className="w-4 h-4" />
+                  <span>Помощь</span>
+                </button>}
 
                 <button
                   onClick={() => selectAdminTab('stats')}
@@ -2054,6 +2125,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold text-sm shadow-sm transition-colors cursor-pointer"
                   >
                     {isSavingContacts ? 'Сохранение…' : 'Сохранить контакты'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Editable public help section */}
+            {activeTab === 'donations' && currentUser?.role === 'administrator' && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <form onSubmit={handleDonationSettingsSubmit} className="max-w-3xl space-y-5 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
+                  <div>
+                    <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">
+                      <Package className="h-3.5 w-3.5 text-amber-600" />
+                      Раздел сайта
+                    </div>
+                    <h4 className="font-heading text-xl font-black text-stone-900">Помочь котикам</h4>
+                    <p className="mt-1 text-sm text-stone-500">
+                      Здесь можно изменить текст помощи и список вещей, которые посетитель сможет выбрать для посылки.
+                    </p>
+                  </div>
+
+                  <label className="space-y-1.5">
+                    <span className="block text-xs font-bold uppercase tracking-wider text-stone-700">Заголовок перевода</span>
+                    <input
+                      type="text"
+                      required
+                      maxLength={150}
+                      value={donationForm.title}
+                      onChange={(event) => setDonationForm((current) => ({ ...current, title: event.target.value }))}
+                      className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </label>
+
+                  <label className="space-y-1.5">
+                    <span className="block text-xs font-bold uppercase tracking-wider text-stone-700">Пояснение к переводу</span>
+                    <textarea
+                      required
+                      maxLength={1000}
+                      rows={3}
+                      value={donationForm.description}
+                      onChange={(event) => setDonationForm((current) => ({ ...current, description: event.target.value }))}
+                      className="w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </label>
+
+                  <div className="space-y-3">
+                    <div>
+                      <span className="block text-xs font-bold uppercase tracking-wider text-stone-700">Что можно вложить в посылку</span>
+                      <p className="mt-1 text-xs text-stone-500">Добавьте до 30 вариантов. Пустые и повторяющиеся строки при сохранении удалятся.</p>
+                    </div>
+                    <div className="space-y-2">
+                      {donationForm.supplies.map((item, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            required
+                            maxLength={200}
+                            aria-label={`Полезная вещь ${index + 1}`}
+                            value={item}
+                            onChange={(event) => updateDonationSupply(index, event.target.value)}
+                            placeholder="Например, корм или пелёнки"
+                            className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeDonationSupply(index)}
+                            disabled={donationForm.supplies.length <= 1}
+                            aria-label={`Удалить позицию ${index + 1}`}
+                            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-stone-200 text-stone-500 transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addDonationSupply}
+                      disabled={donationForm.supplies.length >= 30}
+                      className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Добавить позицию
+                    </button>
+                  </div>
+
+                  {donationSaveMessage && (
+                    <div className={'flex items-start gap-2 rounded-xl border px-4 py-3 text-sm font-semibold ' + (
+                      donationSaveMessage.type === 'success'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                        : 'border-rose-200 bg-rose-50 text-rose-700'
+                    )}>
+                      {donationSaveMessage.type === 'success'
+                        ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                        : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                      {donationSaveMessage.text}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSavingDonationSettings}
+                    className="cursor-pointer rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600 disabled:opacity-60"
+                  >
+                    {isSavingDonationSettings ? 'Сохранение…' : 'Сохранить раздел'}
                   </button>
                 </form>
               </div>

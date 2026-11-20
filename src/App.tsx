@@ -39,6 +39,7 @@ import {
   apiSaveSetting,
   apiUpdateShelterStats,
   apiUpdateSiteContacts,
+  apiUpdateDonationSettings,
   apiDownloadDatabaseBackup,
   apiImportDatabaseBackup,
   apiGetCatRatings,
@@ -134,6 +135,12 @@ export default function App() {
     title: 'Помочь переводом',
     description: 'Отсканируйте QR-код в мобильном приложении банка.',
     image: '/images/donation-qr.jpg',
+    supplies: [
+      'Качественные корма и паштеты',
+      'Наполнитель и пелёнки 60×90',
+      'Когтеточки и прочные переноски',
+      'Средства от блох и гельминтов',
+    ],
   });
 
   // Liked article IDs
@@ -753,6 +760,12 @@ export default function App() {
     showToast('Контакты сайта обновлены');
   };
 
+  const handleSaveDonationSettings = async (settings: DonationSettings) => {
+    const savedSettings = await apiUpdateDonationSettings(settings);
+    setDonationSettings(savedSettings);
+    showToast('Раздел «Помочь котикам» обновлён');
+  };
+
   const scrollToCats = () => {
     const el = document.getElementById('cats');
     if (el) {
@@ -1020,6 +1033,8 @@ export default function App() {
         onSaveShelterStats={handleSaveShelterStats}
         siteContacts={siteContacts}
         onSaveSiteContacts={handleSaveSiteContacts}
+        donationSettings={donationSettings}
+        onSaveDonationSettings={handleSaveDonationSettings}
         onAddNewCat={() => {
           setEditingCat(null);
           setIsAddEditModalOpen(true);

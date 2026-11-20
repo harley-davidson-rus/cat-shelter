@@ -117,6 +117,7 @@ export interface DonationSettings {
   title: string;
   description: string;
   image: string;
+  supplies: string[];
 }
 
 export interface DatabaseBackupSettings {

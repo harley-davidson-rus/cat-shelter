@@ -1,15 +1,9 @@
 import React from 'react';
-import { Camera, Car, Heart, MapPin, Package, Phone, QrCode, Send, Sparkles, X, Youtube } from 'lucide-react';
+import { Camera, Car, Check, Heart, MapPin, Package, Phone, QrCode, Send, Sparkles, X, Youtube } from 'lucide-react';
 import { Cat, DonationSettings, SiteContacts } from '../types';
 import { MaxIcon, RutubeIcon, VkIcon } from './Footer';
 
 const paymentUrl = 'https://qr.nspk.ru/AS1A005DJGHEU5TN8MEQBS8OTS7S95IK?type=01&bank=100000000111&crc=01FA';
-const supplies = [
-  'Качественные корма и паштеты',
-  'Наполнитель и пелёнки 60×90',
-  'Когтеточки и прочные переноски',
-  'Средства от блох и гельминтов',
-];
 const volunteerOptions = [
   { label: 'Фотосъёмка котиков', Icon: Camera },
   { label: 'Социализация и игры', Icon: Sparkles },
@@ -24,8 +18,19 @@ export const HelpShelterModal: React.FC<{
   contacts: SiteContacts;
   donationSettings: DonationSettings;
 }> = ({ isOpen, onClose, heroCat, contacts, donationSettings }) => {
+  const [selectedSupplies, setSelectedSupplies] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (isOpen) setSelectedSupplies([]);
+  }, [isOpen]);
+
   if (!isOpen) return null;
   const photo = heroCat?.photos?.find((item) => item?.trim());
+  const toggleSupply = (item: string) => {
+    setSelectedSupplies((current) => current.includes(item)
+      ? current.filter((selected) => selected !== item)
+      : [...current, item]);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-stone-900/65 p-2 backdrop-blur-sm sm:p-3" onClick={onClose}>
@@ -87,7 +92,36 @@ export const HelpShelterModal: React.FC<{
           <div className="mt-3 grid items-stretch gap-3 md:grid-cols-2">
             <section className="h-full rounded-2xl border border-stone-200 bg-stone-50 p-3.5">
               <div className="flex items-center gap-2 text-sm font-bold text-stone-900"><Package className="h-4 w-4 text-amber-600" />Посылка с полезными вещами</div>
-              <ul className="mt-2 grid gap-x-3 gap-y-1 text-[11px] leading-relaxed text-stone-700 sm:grid-cols-2">{supplies.map((item) => <li key={item}>• {item}</li>)}</ul>
+              <p className="mt-1 text-[10px] text-stone-500">Отметьте, что планируете положить в посылку.</p>
+              <div className="mt-2 grid gap-1.5 text-[11px] leading-relaxed text-stone-700 sm:grid-cols-2">
+                {donationSettings.supplies.map((item, index) => {
+                  const isSelected = selectedSupplies.includes(item);
+                  return (
+                    <label
+                      key={`${item}-${index}`}
+                      className={'flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 transition-colors ' + (
+                        isSelected ? 'border-amber-300 bg-amber-50 text-stone-900' : 'border-stone-200 bg-white hover:border-amber-200'
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSupply(item)}
+                        className="sr-only"
+                      />
+                      <span className={'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ' + (
+                        isSelected ? 'border-amber-500 bg-amber-500 text-white' : 'border-stone-300 bg-white'
+                      )}>
+                        {isSelected && <Check className="h-3 w-3" strokeWidth={3} />}
+                      </span>
+                      <span>{item}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {selectedSupplies.length > 0 && (
+                <p className="mt-2 text-[10px] font-bold text-amber-800">Выбрано позиций: {selectedSupplies.length}</p>
+              )}
             </section>
             <section className="h-full rounded-2xl border border-stone-200 bg-stone-50 p-3.5">
               <div className="flex items-center gap-2 text-sm font-bold text-stone-900"><Heart className="h-4 w-4 text-rose-500" />Стать волонтёром</div>
